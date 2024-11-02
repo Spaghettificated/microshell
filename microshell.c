@@ -19,7 +19,6 @@ int check_in_path(char *path, char *name){
     }
     return 0;
 }
-
 void ls(char *path, FILE* out){
     DIR *dir;
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
@@ -53,7 +52,6 @@ char *take_path_token(char **path){ // consumes path
         }
     }
 }
-
 int move_path(char *to_move, char *path){
     while (path[0] != '\0')
     {
@@ -92,7 +90,6 @@ int move_path(char *to_move, char *path){
     }
     return 0;
 }
-
 int cd(char *cursor, char *path, FILE* err){
     char new_cursor[250];
     if (path[0] != '/'){
@@ -107,6 +104,7 @@ int cd(char *cursor, char *path, FILE* err){
         return 1;
     }
 }
+
 int echo(char *message, FILE *out){
     printf("\t\t> echo: '%s' to %d\n", message, out);
     fprintf(out, "%s\n", message);
@@ -150,48 +148,68 @@ int command(char *input, char *cursor, FILE *in, FILE *out, FILE *err){
     clearerr(stdin);
 }
 
+void canon(struct termios *old){
+    if (tcgetattr(0, old) < 0)
+            perror("tcsetattr()");
+    old->c_lflag &= ~ICANON;
+    old->c_lflag &= ~ECHO;
+    old->c_cc[VMIN] = 1;
+    old->c_cc[VTIME] = 0;
+    if (tcsetattr(0, TCSANOW, old) < 0)
+            perror("tcsetattr ICANON");
+}
+void uncanon(struct termios *old){
+    old->c_lflag |= ICANON;
+    old->c_lflag |= ECHO;
+    if (tcsetattr(0, TCSADRAIN, old) < 0)
+            perror ("tcsetattr ~ICANON");
+}
 
+void show_prompt(char *cursor){
+    char hostname[256];
+    if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
+    printf("[%s@%s %s]$ ", getenv("USER"), hostname, cursor);
+}
+void typec(char c, char *input, int len, int backspace){
+    char ci;
+    for(int i = len - backspace; i<=len; i++){
+        ci = input[i];
+        input[i]=c;
+        printf("%c", c);
+        c=ci;
+    }
+    input[len+1] = '\0';
+    for (int i = 0; i < backspace; i++)
+    {
+        printf("\b");
+    }
+}
+void parse_input(char *input){
+    printf("\n");
+    input[0] = '\0';
+}
 
 int main() {
-
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
-
     char *cursor = (char *)malloc((size_t)size);
-
-
     // czemu potrzebny osobny bufer???
-
     // char *cursor;
     // char *buffer = (char *)malloc((size_t)size); 
-    
     // if ((buffer != NULL)){
     //     cursor = getcwd(buffer, (size_t)size);
-
     if ((cursor != NULL)){ // działa bez niego wtf?
         getcwd(cursor, (size_t)size);
     }
     else
         printf("jakiś błąd");
 
-
-
     char input[256] = "";
     int backspace = 0;
-    char hostname[256];
-    if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
-    printf("[%s@%s %s]$ ", getenv("USER"), hostname, cursor);
+    show_prompt(cursor);
+    char c;
 
-    char c = 0;
-    char in[1024];
     struct termios old = {0};
-    if (tcgetattr(0, &old) < 0)
-            perror("tcsetattr()");
-    old.c_lflag &= ~ICANON;
-    old.c_lflag &= ~ECHO;
-    old.c_cc[VMIN] = 1;
-    old.c_cc[VTIME] = 0;
-    if (tcsetattr(0, TCSANOW, &old) < 0)
-            perror("tcsetattr ICANON");
+    canon(&old);
     while(1){
         fflush(stdout);
         fflush(stdin);
@@ -232,29 +250,20 @@ int main() {
                 }
                 else { printf("[[%c]]",c); }
             }
+            else if (c=='\e'){ printf("\n"); break; }
             else { printf("[%c]",c); }
             continue;
         }
+        else if (c=='\n'){
+            parse_input(input);
+            show_prompt(cursor);
+        }
         else{
-            char ci;
-            for(int i = len - backspace; i<=len; i++){
-                ci = input[i];
-                input[i]=c;
-                printf("%d", c);
-                c=ci;
-            }
-            input[len+1] = '\0';
-            for (int i = 0; i < backspace; i++)
-            {
-                printf("\b");
-            }
-            
+            typec(c, input, len, backspace);
         }
     }
-    old.c_lflag |= ICANON;
-    old.c_lflag |= ECHO;
-    if (tcsetattr(0, TCSADRAIN, &old) < 0)
-            perror ("tcsetattr ~ICANON");
-    return 0;
 
+    uncanon(&old);
+    free(cursor);
+    return 0;
 }
