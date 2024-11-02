@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
 
 int check_in_path(char *path, char *name){
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
@@ -174,60 +175,86 @@ int main() {
 
 
 
-    char input[256];
+    char input[256] = "";
+    int backspace = 0;
     char hostname[256];
+    if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
+    printf("[%s@%s %s]$ ", getenv("USER"), hostname, cursor);
+
+    char c = 0;
+    char in[1024];
+    struct termios old = {0};
+    if (tcgetattr(0, &old) < 0)
+            perror("tcsetattr()");
+    old.c_lflag &= ~ICANON;
+    old.c_lflag &= ~ECHO;
+    old.c_cc[VMIN] = 1;
+    old.c_cc[VTIME] = 0;
+    if (tcsetattr(0, TCSANOW, &old) < 0)
+            perror("tcsetattr ICANON");
     while(1){
-        if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
-        printf("[%s@%s %s]$ ", getenv("USER"), hostname, cursor);
-        // printf("< eigen | %s > ", cursor);
-        fgets(input, sizeof(input), stdin);
-        input[strlen(input)-1] = '\0'; // usuń enter
-        if(!strncmp(input,"load",4))   {  
-            char buffer[64]; 
-            load(buffer); 
-            clearerr(stdin); 
-            fprintf(stdin, buffer); 
-            fgets(input, sizeof(input), stdin);
-            input[strlen(input)-1] = '\0'; // usuń enter
-        }
-        save(input);
-
-        char *token = strtok(input, "|");
-        FILE *in = stdin;
-        FILE *out = stdout;
-        int i = 0;
-        int pipes[10][2];
-
-        printf("> in: %d, out: %d, err %d\n", stdin, stdout, stderr);
-        while(token != NULL){
-            char *next_token = strtok(NULL, "|");
-            if(next_token != NULL ){
-                if (pipe (pipes[i])){
-                    fprintf (stderr, "Pipe failed.\n");
-                    return EXIT_FAILURE;
+        fflush(stdout);
+        fflush(stdin);
+        c = getchar();
+        int len = strlen(input);
+        if(c=='\e'){
+            if((c=getchar()) == '['){ // wciśnięto strzałke
+                c = getchar();
+                if(c=='D' && backspace<len){ // LEFT
+                    printf("\b");
+                    backspace+=1;
                 }
-                
-                close(pipes[i][0]);
-                out = fdopen(pipes[i][0], "r");
-                command(token, cursor, in, out, stderr);
-                close(pipes[i][1]);
-                in = fdopen(pipes[i][1], "w");
+                else if(c=='C' && backspace>0){ // RIGHT
+                    printf("\e[C");
+                    backspace-=1;
+                }
+                else if(c=='A' || c=='B'){ // UP||DOWN
+                    printf("↓↑");
+                }
+                else if(c=='1' && getchar()==';' && getchar()=='5'){ // trzymany ctrl
+                    c = getchar();
+                    int i = len - backspace;
+                    if(c=='D' && i>0){ // LEFT
+                        do{
+                            i--;
+                            printf("\b");
+                            backspace+=1;
+                        }while (i>0 && (input[i-1]!=' ' || input[i]==' '));
+                    }
+                    else if(c=='C' && i<len){ // RIGHT
+                        do{
+                            i++;
+                            printf("\e[C");
+                            backspace-=1;
+                        }while (i<len && (input[i-1]!=' ' || input[i]==' '));
+                    }
+                    else{printf("[[[%c]]]",c);}
+                }
+                else { printf("[[%c]]",c); }
             }
-            else{
-                command(token, cursor, in, stdout, stderr);
-            }
-            token = next_token;
-            i++;
+            else { printf("[%c]",c); }
+            continue;
         }
-        // i--;
-        // for(int j = i; i>=0; i--){
-        //     // close(pipes[i][0]);
-        //     close(pipes[i][1]);
-        // }
-
-        // command(input, cursor, stdin, stdout, stderr);
+        else{
+            char ci;
+            for(int i = len - backspace; i<=len; i++){
+                ci = input[i];
+                input[i]=c;
+                printf("%d", c);
+                c=ci;
+            }
+            input[len+1] = '\0';
+            for (int i = 0; i < backspace; i++)
+            {
+                printf("\b");
+            }
+            
+        }
     }
-    
+    old.c_lflag |= ICANON;
+    old.c_lflag |= ECHO;
+    if (tcsetattr(0, TCSADRAIN, &old) < 0)
+            perror ("tcsetattr ~ICANON");
     return 0;
 
 }
