@@ -170,6 +170,54 @@ void show_prompt(char *cursor){
     if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
     printf("[%s@%s %s]$ ", getenv("USER"), hostname, cursor);
 }
+void move_cursor(int amount, int len, int backspace){
+    char *message = (amount>0) ? "\e[C" : "\b";
+    for (int i = 0; i < abs(amount); i++)
+    {
+        printf(message);
+    }
+}
+// void reconnect_tail(int from, char *input, int len, int backspace){
+//     for(int i = 0; i<=len-from; i++){
+//         int cur = len - backspace + i; 
+//         input[cur] = input[from + i];
+//         printf("%c",input[cur]);
+//     }
+//     for (int i = 0; i < from - (len-backspace); i++)
+//     {
+//         printf(" ");
+//     }
+//     for (int i = 0; i < len-backspace; i++)
+//     {
+//         printf("\b");
+//     }
+// }
+int delete_back(char *input, int *len, int backspace){
+    if(backspace >= (*len)){
+        return 1;
+    }
+    printf("\b");
+    for(int i = (*len) - backspace-1; i<(*len); i++){
+        input[i] = input[i+1];
+        printf("%c",input[i]);
+    }
+    printf(" ");
+    for (int i = 0; i < backspace+1; i++)
+    {
+        printf("\b");
+    }
+    (*len)--;
+    return 0;
+}
+int delete_front(char *input, int *len, int *backspace){
+    if(backspace <= 0){
+        return 1;
+    }
+    move_cursor(1, *len, backspace);
+    (*backspace)--;
+    delete_back(input, len, backspace);
+}
+
 void typec(char c, char *input, int len, int backspace){
     char ci;
     for(int i = len - backspace; i<=len; i++){
@@ -179,14 +227,112 @@ void typec(char c, char *input, int len, int backspace){
         c=ci;
     }
     input[len+1] = '\0';
+    move_cursor(-backspace, len, backspace);
+
+}
+void debugc(char c, char *input, int len, int backspace){
+    char ci;
+    for(int i = len - backspace; i<=len; i++){
+        ci = input[i];
+        input[i]=c;
+        printf("%d", c);
+        c=ci;
+    }
+    input[len+1] = '\0';
     for (int i = 0; i < backspace; i++)
     {
         printf("\b");
     }
 }
-void parse_input(char *input){
+void parse_input(char *input, char *cursor){
+    save(input);
     printf("\n");
-    input[0] = '\0';
+
+        // if(!strncmp(input,"load",4))   {  
+        //     char buffer[64]; 
+        //     load(buffer); 
+        //     clearerr(stdin); 
+        //     fprintf(stdin, buffer); 
+        //     fgets(input, sizeof(input), stdin);
+        //     input[strlen(input)-1] = '\0'; // usuń enter
+        // }
+    char c;
+    char *command = NULL;
+    int argc = 0;
+    char **args = calloc(10, sizeof(char));
+    char *token = NULL;
+    int in_quotes = 0;
+    int borrowed_time = 0;
+    for (int i = 0; (c = input[i]) != '\0'; i++){
+        if(token==NULL){
+            token = input+i;
+        }
+        if(!in_quotes){
+            if(c=='|'){// run command here
+                token = NULL;
+                command = NULL;
+                argc = 0;
+            }
+            else if(c==' '){
+                if(command==NULL){
+                    command = token;
+                }
+                else{
+                    args[argc] = token;
+                    argc++;
+                }
+                token = NULL;
+                input[i-borrowed_time] = '\0'; //how to use borrowed time?
+            }
+        }
+        if(c=='"'){
+            in_quotes = !in_quotes;
+            borrowed_time++;
+        }
+    }
+
+    if(command==NULL){
+        command = token;
+    }
+    else{
+        args[argc] = token;
+        argc++;
+    }
+    token = NULL;
+    // run command
+    command = NULL;
+    argc = 0;
+
+    free(args);
+    
+
+    // char *token = strtok(input, "|");
+    // FILE *in = stdin;
+    // FILE *out = stdout;
+    // int i = 0;
+    // int pipes[10][2];
+
+    // printf("> in: %d, out: %d, err %d\n", stdin, stdout, stderr);
+    // while(token != NULL){
+    //     char *next_token = strtok(NULL, "|");
+    //     if(next_token != NULL ){
+    //         if ( pipe(pipes[i]) ){
+    //             fprintf (stderr, "Pipe failed.\n");
+    //             return EXIT_FAILURE;
+    //         }
+    //         close(pipes[i][0]);
+    //         out = fdopen(pipes[i][0], "r");
+    //         command(token, cursor, in, out, stderr);
+    //         close(pipes[i][1]);
+    //         in = fdopen(pipes[i][1], "w");
+    //     }
+    //     else{
+    //         command(token, cursor, in, stdout, stderr);
+    //     }
+    //     token = next_token;
+    //     i++;
+    // }
+    // input[0] = '\0';
 }
 
 int main() {
@@ -254,8 +400,35 @@ int main() {
             else { printf("[%c]",c); }
             continue;
         }
+        else if (c<=26){ //operacje z ctrl
+            char d = c+64;
+            if(d=='W'){ //backspace
+                while (/* condition */)
+                {
+                    /* code */
+                }
+                
+                delete_back(input, &len, backspace);
+            }
+            else{
+                printf("^%c", d);
+            }
+        }
+        else if (c==127){ //backspace
+            delete_back(input, &len, backspace);
+            // printf("\b");
+            // for(int i = len - backspace-1; i<len; i++){
+            //     input[i] = input[i+1];
+            //     printf("%c",input[i]);
+            // }
+            // printf(" ");
+            // for (int i = 0; i < backspace+1; i++)
+            // {
+            //     printf("\b");
+            // }
+        }
         else if (c=='\n'){
-            parse_input(input);
+            parse_input(input, cursor);
             show_prompt(cursor);
         }
         else{
