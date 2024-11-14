@@ -5,6 +5,16 @@
 #include <string.h>
 #include <termios.h>
 
+// struct typingField{
+//     char *input;
+//     int len;
+//     int cursor;
+// };
+// int Smove_cursor(int amount, struct typingField *field){
+//     return 0;
+// }
+
+
 int check_in_path(char *path, char *name){
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
     DIR *dir = opendir(path);
@@ -213,9 +223,9 @@ int delete_front(char *input, int *len, int *backspace){
     if(backspace <= 0){
         return 1;
     }
-    move_cursor(1, *len, backspace);
+    move_cursor(1, *len, *backspace);
     (*backspace)--;
-    delete_back(input, len, backspace);
+    delete_back(input, len, *backspace);
 }
 
 void typec(char c, char *input, int len, int backspace){
@@ -403,10 +413,10 @@ int main() {
         else if (c<=26){ //operacje z ctrl
             char d = c+64;
             if(d=='W'){ //backspace
-                while (/* condition */)
-                {
-                    /* code */
-                }
+                // while (/* condition */)
+                // {
+                //     /* code */
+                // }
                 
                 delete_back(input, &len, backspace);
             }
