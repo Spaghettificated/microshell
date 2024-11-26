@@ -5,15 +5,107 @@
 #include <string.h>
 #include <termios.h>
 
-// struct typingField{
-//     char *input;
-//     int len;
-//     int cursor;
-// };
-// int Smove_cursor(int amount, struct typingField *field){
-//     return 0;
-// }
+typedef struct typingField{
+    char input[256];
+    int len;
+    int cursor;
+}typingField;
+void insertc(char c, typingField *field){
+    printf("%c", c);
+    field->input[field->cursor] = c;
+    field->cursor++;
+}
+int move_cursor(int amount, struct typingField *field){
+    int cursor = field->cursor;
+    amount = (cursor + amount) > 0          ? amount : -cursor;
+    amount = (cursor + amount) < field->len ? amount : field->len-cursor;
 
+    char *message = (amount>0) ? "\e[C" : "\b";
+    for (int i = 0; i < abs(amount); i++) {
+        printf(message);
+    }
+    field->cursor += amount; 
+    return amount;
+}
+int set_cursor(int new_cursor, struct typingField *field){
+    new_cursor = new_cursor >= 0            ? new_cursor : 0;
+    new_cursor = new_cursor <= field->len   ? new_cursor : field->len;
+
+    int amount = new_cursor - field->cursor;
+    char *message = (amount > 0) ? "\e[C" : "\b";
+    for (int i = 0; i < abs(amount); i++) {
+        printf(message);
+    }
+    field->cursor = new_cursor;
+    return amount;
+}
+void typec(char c, typingField *field){
+    char c1;
+    int from = field->cursor;
+    while(field->cursor <= field->len){
+        c1 = field->input[field->cursor];
+        insertc(c, field);
+        c = c1;
+    }
+    field->len++;
+    field->input[field->len] = '\0';
+    set_cursor(from+1, field);
+}
+void Stype_char(char c, typingField *field){
+    int from = field->cursor;
+    char ci;
+    for(int i = from; i<=field->len; i++){
+        printf("%c", c);
+        field->cursor++;
+
+        ci = field->input[i];
+        field->input[i] = c;
+        c = ci;
+    }
+    field->len++;
+    set_cursor(from+1, field);
+}
+void type_str(char *str, typingField *field){
+    int amount = strlen(str);
+    field->len += amount;
+    for(int i = (field->len); i <= (field->cursor) + amount; i--){ // przesunięcie starego inputu do przodu
+        field->input[i] = field->input[i-amount];
+    }
+    for (int i = 0; i < amount; i++){
+        insertc(str[i], field);
+    }
+    while (field->cursor < field->len){
+        insertc(field->input[field->cursor], field);
+    }
+    field->input[field->len] = '\0';
+};
+void delete(int amount, typingField *field){
+    field->len -= amount;
+    while (field->cursor < field->len)
+    {
+        insertc(field->input[field->cursor + amount], field);
+    }
+    field->input[field->len] = '\0';
+}
+void Sbackspace(struct typingField *field){
+    delete(1,field);
+}
+void Sdelete(struct typingField *field){
+    move_cursor(1, field);
+    Sbackspace(field);
+}
+int next_token(int from, struct typingField *field){
+    while(from < field->len && (field->input[from] != ' ' || field->input[from+1] == ' ')){
+        from++;
+    }
+    return from;
+}
+int prev_token(int from, struct typingField *field){
+    while(from > 0 && (field->input[from] == ' ' || field->input[from-1] != ' ')){
+        from--;
+    }
+    return from;
+}
 
 int check_in_path(char *path, char *name){
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
@@ -180,7 +272,7 @@ void show_prompt(char *cursor){
     if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
     printf("[%s@%s %s]$ ", getenv("USER"), hostname, cursor);
 }
-void move_cursor(int amount, int len, int backspace){
+void move_cursorA(int amount, int len, int backspace){
     char *message = (amount>0) ? "\e[C" : "\b";
     for (int i = 0; i < abs(amount); i++)
     {
@@ -202,58 +294,60 @@ void move_cursor(int amount, int len, int backspace){
 //         printf("\b");
 //     }
 // }
-int delete_back(char *input, int *len, int backspace){
-    if(backspace >= (*len)){
-        return 1;
-    }
-    printf("\b");
-    for(int i = (*len) - backspace-1; i<(*len); i++){
-        input[i] = input[i+1];
-        printf("%c",input[i]);
-    }
-    printf(" ");
-    for (int i = 0; i < backspace+1; i++)
-    {
-        printf("\b");
-    }
-    (*len)--;
-    return 0;
-}
-int delete_front(char *input, int *len, int *backspace){
-    if(backspace <= 0){
-        return 1;
-    }
-    move_cursor(1, *len, *backspace);
-    (*backspace)--;
-    delete_back(input, len, *backspace);
-}
 
-void typec(char c, char *input, int len, int backspace){
-    char ci;
-    for(int i = len - backspace; i<=len; i++){
-        ci = input[i];
-        input[i]=c;
-        printf("%c", c);
-        c=ci;
-    }
-    input[len+1] = '\0';
-    move_cursor(-backspace, len, backspace);
+// int delete_back(char *input, int *len, int backspace){
+//     if(backspace >= (*len)){
+//         return 1;
+//     }
+//     printf("\b");
+//     for(int i = (*len) - backspace-1; i<(*len); i++){
+//         input[i] = input[i+1];
+//         printf("%c",input[i]);
+//     }
+//     printf(" ");
+//     for (int i = 0; i < backspace+1; i++)
+//     {
+//         printf("\b");
+//     }
+//     (*len)--;
+//     return 0;
+// }
+// int delete_front(char *input, int *len, int *backspace){
+//     if(backspace <= 0){
+//         return 1;
+//     }
+//     move_cursor(1, *len, *backspace);
+//     (*backspace)--;
+//     delete_back(input, len, *backspace);
+// }
 
-}
-void debugc(char c, char *input, int len, int backspace){
-    char ci;
-    for(int i = len - backspace; i<=len; i++){
-        ci = input[i];
-        input[i]=c;
-        printf("%d", c);
-        c=ci;
-    }
-    input[len+1] = '\0';
-    for (int i = 0; i < backspace; i++)
-    {
-        printf("\b");
-    }
-}
+// void typec(char c, char *input, int len, int backspace){
+//     char ci;
+//     for(int i = len - backspace; i<=len; i++){
+//         ci = input[i];
+//         input[i]=c;
+//         printf("%c", c);
+//         c=ci;
+//     }
+//     input[len+1] = '\0';
+//     move_cursor(-backspace, len, backspace);
+// }
+
+// void debugc(char c, char *input, int len, int backspace){
+//     char ci;
+//     for(int i = len - backspace; i<=len; i++){
+//         ci = input[i];
+//         input[i]=c;
+//         printf("%d", c);
+//         c=ci;
+//     }
+//     input[len+1] = '\0';
+//     for (int i = 0; i < backspace; i++)
+//     {
+//         printf("\b");
+//     }
+// }
+
 void parse_input(char *input, char *cursor){
     save(input);
     printf("\n");
@@ -358,9 +452,13 @@ int main() {
     }
     else
         printf("jakiś błąd");
+    
+    typingField field;
+    // *field.input = "";
+    field.len = 0;
+    field.cursor = 0;
 
-    char input[256] = "";
-    int backspace = 0;
+    // int backspace = 0;
     show_prompt(cursor);
     char c;
 
@@ -370,62 +468,63 @@ int main() {
         fflush(stdout);
         fflush(stdin);
         c = getchar();
-        int len = strlen(input);
+        // int len = strlen(input);
+        int len = field.len;
         if(c=='\e'){
             if((c=getchar()) == '['){ // wciśnięto strzałke
                 c = getchar();
-                if(c=='D' && backspace<len){ // LEFT
-                    printf("\b");
-                    backspace+=1;
+                if(c=='D'){ // LEFT
+                    move_cursor(-1, &field);
                 }
-                else if(c=='C' && backspace>0){ // RIGHT
-                    printf("\e[C");
-                    backspace-=1;
+                else if(c=='C'){ // RIGHT
+                    move_cursor(1, &field);
                 }
                 else if(c=='A' || c=='B'){ // UP||DOWN
                     printf("↓↑");
                 }
-                else if(c=='1' && getchar()==';' && getchar()=='5'){ // trzymany ctrl
-                    c = getchar();
-                    int i = len - backspace;
-                    if(c=='D' && i>0){ // LEFT
-                        do{
-                            i--;
-                            printf("\b");
-                            backspace+=1;
-                        }while (i>0 && (input[i-1]!=' ' || input[i]==' '));
-                    }
-                    else if(c=='C' && i<len){ // RIGHT
-                        do{
-                            i++;
-                            printf("\e[C");
-                            backspace-=1;
-                        }while (i<len && (input[i-1]!=' ' || input[i]==' '));
-                    }
-                    else{printf("[[[%c]]]",c);}
-                }
+                // else if(c=='1' && getchar()==';' && getchar()=='5'){ // trzymany ctrl
+                //     c = getchar();
+                //     int i = len - backspace;
+                //     if(c=='D' && i>0){ // LEFT
+                //         do{
+                //             i--;
+                //             printf("\b");
+                //             backspace+=1;
+                //         }while (i>0 && (input[i-1]!=' ' || input[i]==' '));
+                //     }
+                //     else if(c=='C' && i<len){ // RIGHT
+                //         do{
+                //             i++;
+                //             printf("\e[C");
+                //             backspace-=1;
+                //         }while (i<len && (input[i-1]!=' ' || input[i]==' '));
+                //     }
+                //     else{printf("[[[%c]]]",c);}
+                // }
                 else { printf("[[%c]]",c); }
             }
             else if (c=='\e'){ printf("\n"); break; }
             else { printf("[%c]",c); }
             continue;
         }
-        else if (c<=26){ //operacje z ctrl
-            char d = c+64;
-            if(d=='W'){ //backspace
-                // while (/* condition */)
-                // {
-                //     /* code */
-                // }
-                
-                delete_back(input, &len, backspace);
-            }
-            else{
-                printf("^%c", d);
-            }
-        }
+        // else if (c<=26){ //operacje z ctrl
+        //     char d = c+64;
+        //     if(d=='W'){ //backspace
+        //         // while (/* condition */)
+        //         // {
+        //         //     /* code */
+        //         // } 
+        //         // delete_back(input, &len, backspace);
+        //         Sbackspace(&field);
+        //     }
+        //     else{
+        //         printf("^%c", d);
+        //     }
+        // }
         else if (c==127){ //backspace
-            delete_back(input, &len, backspace);
+            // delete_back(input, &len, backspace);
+            Sbackspace(&field);
+
             // printf("\b");
             // for(int i = len - backspace-1; i<len; i++){
             //     input[i] = input[i+1];
@@ -438,11 +537,18 @@ int main() {
             // }
         }
         else if (c=='\n'){
-            parse_input(input, cursor);
-            show_prompt(cursor);
+            // printf("[%d/%d]", field.cursor, field.len);
+            printf("\n[%s|%d|%d]\n", field.input, field.cursor, field.len);
+            field.input[0]='\0';
+            field.input[1]='\0';
+            field.len = 0;
+            field.cursor = 0;
+            // parse_input(field.input, cursor);
+            // show_prompt(cursor);
         }
         else{
-            typec(c, input, len, backspace);
+            // typec(c, input, len, backspace);
+            typec(c, &field);
         }
     }
 
