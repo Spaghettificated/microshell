@@ -5,6 +5,25 @@
 #include <string.h>
 #include <termios.h>
 
+#define RED   "\x1B[31m"
+#define GREEN   "\x1B[32m"
+#define YELLOW   "\x1B[33m"
+#define BLUE   "\x1B[34m"
+#define MAGENTA   "\x1B[35m"
+#define CYAN   "\x1B[36m"
+#define WHITE   "\x1B[37m"
+#define NOCOLOR "\x1B[0m"
+#define RED_BOLD   "\x1B[1;0;1m"
+#define GREEN_BOLD   "\x1B[1;0;2m"
+#define YELLOW_BOLD   "\x1B[1;0;3m"
+#define BLUE_BOLD   "\x1B[1;0;4m"
+#define MAGENTA_BOLD   "\x1B[1;0;5m"
+#define CYAN_BOLD   "\x1B[36m"
+#define WHITE_BOLD   "\x1B[1;0;7m"
+#define NOCOLOR_BOLD "\x1B[1;0;0m"
+#define BOLD "\x1B[1m"
+
+
 typedef struct typingField{
     char *start;
     char *cursor;
@@ -21,9 +40,15 @@ char *bounds_snap(char *ptr, typingField *field){
     return ptr;
 }
 void insertc(char c, typingField *field){
-    printf("%c", c=='\0' ? ' ' : c);
-    field->cursor[0] = c;
-    field->cursor++;
+    *field->cursor = c;
+    if (c=='\0'){
+        printf(" \b");
+        field->end = field->cursor;
+    }
+    else{
+        printf("%c", c);
+        field->cursor++;
+    }
 }
 int move_cursor(int amount, struct typingField *field){
     char *target = field->cursor + amount;
@@ -45,87 +70,36 @@ int move_cursor(int amount, struct typingField *field){
 }
 int set_cursor(char *new_cursor, typingField *field){
     new_cursor = bounds_snap(new_cursor, field);
-    move_cursor(new_cursor - field->cursor, field);
+    return move_cursor(new_cursor - field->cursor, field);
 }
-// int set_cursor(int new_cursor, struct typingField *field){
-//     new_cursor = new_cursor >= 0            ? new_cursor : 0;
-//     new_cursor = new_cursor <= field->len   ? new_cursor : field->len;
-
-//     int amount = new_cursor - field->cursor;
-//     char *message = (amount > 0) ? "\e[C" : "\b";
-//     for (int i = 0; i < abs(amount); i++) {
-//         printf(message);
-//     }
-//     field->cursor = new_cursor;
-//     return amount;
-// }
 void typec(char c, typingField *field){
     char c1;
     char *from = field->cursor;
     while(field->cursor <= field->end){
-        c1 = field->cursor[0];
+        c1 = *field->cursor;
         insertc(c, field);
         c = c1;
     }
-    field->end++;
-    // field->end = '\0';
-    // set_cursor(from+1, field);
-    move_cursor(from+1 - field->cursor, field);
+    insertc(c1, field);
+    set_cursor(from+1, field);
 }
-// void Stype_char(char c, typingField *field){
-//     int from = field->cursor;
-//     char ci;
-//     for(int i = from; i<=field->len; i++){
-//         printf("%c", c);
-//         field->cursor++;
-
-//         ci = field->input[i];
-//         field->input[i] = c;
-//         c = ci;
-//     }
-//     field->len++;
-//     set_cursor(from+1, field);
-// }
-// void type_str(char *str, typingField *field){
-//     int amount = strlen(str);
-//     field->len += amount;
-//     for(int i = (field->len); i <= (field->cursor) + amount; i--){ // przesunięcie starego inputu do przodu
-//         field->input[i] = field->input[i-amount];
-//     }
-//     for (int i = 0; i < amount; i++){
-//         insertc(str[i], field);
-//     }
-//     while (field->cursor < field->len){
-//         insertc(field->input[field->cursor], field);
-//     }
-//     field->input[field->len] = '\0';
-// };
-// void delete(int amount, typingField *field){
-//     while (field->cursor < field->len)
-//     {
-//         insertc(field->input[field->cursor + amount], field);
-//     }
-//     field->input[field->len] = '\0';
-// }
-// void Sbackspace(struct typingField *field){
-//     delete(1,field);
-// }
-// void Sdelete(struct typingField *field){
-//     move_cursor(1, field);
-//     Sbackspace(field);
-// }
-// int next_token(int from, struct typingField *field){
-//     while(from < field->len && (field->input[from] != ' ' || field->input[from+1] == ' ')){
-//         from++;
-//     }
-//     return from;
-// }
-// int prev_token(int from, struct typingField *field){
-//     while(from > 0 && (field->input[from] == ' ' || field->input[from-1] != ' ')){
-//         from--;
-//     }
-//     return from;
-// }
+void tail_to_cursor(char* tail_pos, typingField *field){
+    char *to = field->cursor;
+    char c; 
+    do{
+        insertc(*tail_pos, field);
+    }while (*(++tail_pos) != '\0');
+    while (field->cursor < field->end){
+        insertc(' ', field);
+    }
+    insertc('\0', field);
+    set_cursor(to, field);
+}
+void backspace(typingField *field){
+    if(move_cursor(-1, field) == -1){
+        tail_to_cursor(field->cursor+1, field);
+    }
+}
 
 int check_in_path(char *path, char *name){
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
@@ -290,7 +264,14 @@ void uncanon(struct termios *old){
 void show_prompt(char *cursor){
     char hostname[256];
     if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
-    printf("[%s@%s %s]$ ", getenv("USER"), hostname, cursor);
+    printf(BOLD);
+    printf(CYAN);
+    printf("[%s@%s", getenv("USER"), hostname, cursor);
+    printf(WHITE);
+    printf(" %s", hostname, cursor);
+    printf(CYAN);
+    printf("]$ ");
+    printf(NOCOLOR);
 }
 void move_cursorA(int amount, int len, int backspace){
     char *message = (amount>0) ? "\e[C" : "\b";
@@ -474,7 +455,7 @@ int main() {
         printf("jakiś błąd");
     
     typingField field;
-    char input_bufor[256];
+    char input_bufor[256] = "";
     // *field.input = "";
     field.start = input_bufor;
     field.cursor = input_bufor;
@@ -545,19 +526,7 @@ int main() {
         //     }
         // }
         else if (c==127){ //backspace
-            // delete_back(input, &len, backspace);
-            // Sbackspace(&field);
-
-            // printf("\b");
-            // for(int i = len - backspace-1; i<len; i++){
-            //     input[i] = input[i+1];
-            //     printf("%c",input[i]);
-            // }
-            // printf(" ");
-            // for (int i = 0; i < backspace+1; i++)
-            // {
-            //     printf("\b");
-            // }
+            backspace(&field);
         }
         else if (c=='\n'){
             // printf("[%d/%d]", field.cursor, field.len);
@@ -570,7 +539,6 @@ int main() {
             // show_prompt(cursor);
         }
         else{
-            // typec(c, input, len, backspace);
             typec(c, &field);
         }
     }
