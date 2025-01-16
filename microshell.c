@@ -23,12 +23,24 @@
 #define NOCOLOR_BOLD "\x1B[1;0;0m"
 #define BOLD "\x1B[1m"
 
+// const int STR_BUFOR_SIZE = 256;
+// const int ARG_BUFOR_SIZE = 64;
+
+#define STR_BUFOR_SIZE 256
+#define ARG_BUFOR_SIZE 64
 
 typedef struct typingField{
     char *start;
     char *cursor;
     char *end;
 }typingField;
+
+typedef struct commandArgs{
+    char *name;
+    char *args[ARG_BUFOR_SIZE];
+    int argc;
+}commandArgs;
+
 int bound_dist(char *ptr, typingField *field){
     if(ptr > field->end) return ptr - field->end;
     if(ptr < field->start) return ptr - field->start;
@@ -85,13 +97,16 @@ void typec(char c, typingField *field){
 }
 void tail_to_cursor(char* tail_pos, typingField *field){
     char *to = field->cursor;
-    char c; 
     do{
         insertc(*tail_pos, field);
     }while (*(++tail_pos) != '\0');
-    while (field->cursor < field->end){
+    int diff = 0;
+    while (field->cursor < tail_pos){
         insertc(' ', field);
-    }
+        diff++;
+    }    
+    // set_cursor(to, field);
+    move_cursor(-diff, field);
     insertc('\0', field);
     set_cursor(to, field);
 }
@@ -99,6 +114,26 @@ void backspace(typingField *field){
     if(move_cursor(-1, field) == -1){
         tail_to_cursor(field->cursor+1, field);
     }
+}
+void deletec(typingField *field){
+    tail_to_cursor(field->cursor+1, field);
+}
+char *token_left(char* start, typingField *field){
+    while( (--start) != field->start){
+        if(*(start-1) == ' ' && *start != ' ' && *start != '\0') return start;
+    }
+    return start;
+}
+char *token_right(char* start, typingField *field){
+    while( (++start) != field->end){
+        if(*(start+1) == ' ' && *start != ' ' && *start != '\0') return start;
+    }
+    return start;
+}
+void clear_field(typingField *field){
+    *field->start = '\0';
+    field->cursor = field->start;
+    field->end = field->start;
 }
 
 int check_in_path(char *path, char *name){
@@ -273,171 +308,175 @@ void show_prompt(char *cursor){
     printf("]$ ");
     printf(NOCOLOR);
 }
-void move_cursorA(int amount, int len, int backspace){
-    char *message = (amount>0) ? "\e[C" : "\b";
-    for (int i = 0; i < abs(amount); i++)
-    {
-        printf(message);
+
+// void parse_input(char *input, char *cursor){
+//     save(input);
+//     printf("\n");
+//
+//         // if(!strncmp(input,"load",4))   {  
+//         //     char buffer[64]; 
+//         //     load(buffer); 
+//         //     clearerr(stdin); 
+//         //     fprintf(stdin, buffer); 
+//         //     fgets(input, sizeof(input), stdin);
+//         //     input[strlen(input)-1] = '\0'; // usuń enter
+//         // }
+//     char c;
+//     char *command = NULL;
+//     int argc = 0;
+//     char **args = calloc(10, sizeof(char));
+//     char *token = NULL;
+//     int in_quotes = 0;
+//     int borrowed_time = 0;
+//     for (int i = 0; (c = input[i]) != '\0'; i++){
+//         if(token==NULL){
+//             token = input+i;
+//         }
+//         if(!in_quotes){
+//             if(c=='|'){// run command here
+//                 token = NULL;
+//                 command = NULL;
+//                 argc = 0;
+//             }
+//             else if(c==' '){
+//                 if(command==NULL){
+//                     command = token;
+//                 }
+//                 else{
+//                     args[argc] = token;
+//                     argc++;
+//                 }
+//                 token = NULL;
+//                 input[i-borrowed_time] = '\0'; //how to use borrowed time?
+//             }
+//         }
+//         if(c=='"'){
+//             in_quotes = !in_quotes;
+//             borrowed_time++;
+//         }
+//     }
+//
+//     if(command==NULL){
+//         command = token;
+//     }
+//     else{
+//         args[argc] = token;
+//         argc++;
+//     }
+//     token = NULL;
+//     // run command
+//     command = NULL;
+//     argc = 0;
+//
+//     free(args);
+//  
+//     // char *token = strtok(input, "|");
+//     // FILE *in = stdin;
+//     // FILE *out = stdout;
+//     // int i = 0;
+//     // int pipes[10][2];
+//
+//     // printf("> in: %d, out: %d, err %d\n", stdin, stdout, stderr);
+//     // while(token != NULL){
+//     //     char *next_token = strtok(NULL, "|");
+//     //     if(next_token != NULL ){
+//     //         if ( pipe(pipes[i]) ){
+//     //             fprintf (stderr, "Pipe failed.\n");
+//     //             return EXIT_FAILURE;
+//     //         }
+//     //         close(pipes[i][0]);
+//     //         out = fdopen(pipes[i][0], "r");
+//     //         command(token, cursor, in, out, stderr);
+//     //         close(pipes[i][1]);
+//     //         in = fdopen(pipes[i][1], "w");
+//     //     }
+//     //     else{
+//     //         command(token, cursor, in, stdout, stderr);
+//     //     }
+//     //     token = next_token;
+//     //     i++;
+//     // }
+//     // input[0] = '\0';
+// }
+
+commandArgs get_command(typingField *field){
+    commandArgs command;
+    char comstr[STR_BUFOR_SIZE];
+    strcpy(comstr, field->start);
+    clear_field(field);
+    command.name = strtok(comstr, " ");
+    command.argc = 0;
+    char *s;
+    while( (command.args[command.argc] = strtok(NULL, " ")) != NULL ){
+        command.argc++;
     }
+    return command;
 }
-// void reconnect_tail(int from, char *input, int len, int backspace){
-//     for(int i = 0; i<=len-from; i++){
-//         int cur = len - backspace + i; 
-//         input[cur] = input[from + i];
-//         printf("%c",input[cur]);
-//     }
-//     for (int i = 0; i < from - (len-backspace); i++)
-//     {
-//         printf(" ");
-//     }
-//     for (int i = 0; i < len-backspace; i++)
-//     {
-//         printf("\b");
-//     }
-// }
 
-// int delete_back(char *input, int *len, int backspace){
-//     if(backspace >= (*len)){
-//         return 1;
-//     }
-//     printf("\b");
-//     for(int i = (*len) - backspace-1; i<(*len); i++){
-//         input[i] = input[i+1];
-//         printf("%c",input[i]);
-//     }
-//     printf(" ");
-//     for (int i = 0; i < backspace+1; i++)
-//     {
-//         printf("\b");
-//     }
-//     (*len)--;
-//     return 0;
-// }
-// int delete_front(char *input, int *len, int *backspace){
-//     if(backspace <= 0){
-//         return 1;
-//     }
-//     move_cursor(1, *len, *backspace);
-//     (*backspace)--;
-//     delete_back(input, len, *backspace);
-// }
-
-// void typec(char c, char *input, int len, int backspace){
-//     char ci;
-//     for(int i = len - backspace; i<=len; i++){
-//         ci = input[i];
-//         input[i]=c;
-//         printf("%c", c);
-//         c=ci;
-//     }
-//     input[len+1] = '\0';
-//     move_cursor(-backspace, len, backspace);
-// }
-
-// void debugc(char c, char *input, int len, int backspace){
-//     char ci;
-//     for(int i = len - backspace; i<=len; i++){
-//         ci = input[i];
-//         input[i]=c;
-//         printf("%d", c);
-//         c=ci;
-//     }
-//     input[len+1] = '\0';
-//     for (int i = 0; i < backspace; i++)
-//     {
-//         printf("\b");
-//     }
-// }
-
-void parse_input(char *input, char *cursor){
-    save(input);
-    printf("\n");
-
-        // if(!strncmp(input,"load",4))   {  
-        //     char buffer[64]; 
-        //     load(buffer); 
-        //     clearerr(stdin); 
-        //     fprintf(stdin, buffer); 
-        //     fgets(input, sizeof(input), stdin);
-        //     input[strlen(input)-1] = '\0'; // usuń enter
-        // }
-    char c;
-    char *command = NULL;
-    int argc = 0;
-    char **args = calloc(10, sizeof(char));
-    char *token = NULL;
-    int in_quotes = 0;
-    int borrowed_time = 0;
-    for (int i = 0; (c = input[i]) != '\0'; i++){
-        if(token==NULL){
-            token = input+i;
-        }
-        if(!in_quotes){
-            if(c=='|'){// run command here
-                token = NULL;
-                command = NULL;
-                argc = 0;
+int input_char(typingField *field){
+    char c = getchar();
+    if(c=='\e'){
+        if((c=getchar()) == '['){ // wciśnięto strzałke
+            c = getchar();
+            if(c=='D'){ // LEFT
+                move_cursor(-1, field);
             }
-            else if(c==' '){
-                if(command==NULL){
-                    command = token;
-                }
-                else{
-                    args[argc] = token;
-                    argc++;
-                }
-                token = NULL;
-                input[i-borrowed_time] = '\0'; //how to use borrowed time?
+            else if(c=='C'){ // RIGHT
+                move_cursor(1, field);
             }
+            else if(c=='A' || c=='B'){ // UP||DOWN
+                printf("↓↑");
+            }
+            else if(c=='1' && getchar()==';' && getchar()=='5'){ // trzymany ctrl
+                c = getchar();
+                if(c=='D'){ // ^LEFT
+                    set_cursor(token_left(field->cursor, field), field);
+                }
+                else if(c=='C'){ // ^RIGHT
+                    set_cursor(token_right(field->cursor, field), field);
+                }
+                else{printf("[[[%c]]]",c);}
+            }
+            else if (c=='3' && getchar()=='~'){ // delete
+                deletec(field); 
+            }
+            else if (c=='H'){ // HOME
+                set_cursor(field->start, field); 
+            }
+            else if (c=='F'){ // END
+                set_cursor(field->end, field); 
+            }
+            else { printf("[[%c]]",c); }
         }
-        if(c=='"'){
-            in_quotes = !in_quotes;
-            borrowed_time++;
+        else if (c=='d'){ // CTRL+DELETE
+            tail_to_cursor(token_right(field->cursor, field)+1, field);
+        }
+        else if (c=='\e'){ printf("\n"); return 1; }
+        else { printf("[%c]",c); }
+    }
+    else if (c<=26){ //operacje z ctrl
+        char d = c+64;
+        if(d=='W'){ //backspace
+            int delta = set_cursor(token_left(field->cursor, field), field);
+            tail_to_cursor(field->cursor - delta, field);
+        }
+        else if (d=='J'){//ENTER
+            printf("\n[%s]", field->start);
+        } 
+        else if (d=='D'){// INTERUPT
+            return 1;
+        }
+        else{
+            printf("^%c", d);
         }
     }
-
-    if(command==NULL){
-        command = token;
+    else if (c==127){ //backspace
+        backspace(field);
     }
     else{
-        args[argc] = token;
-        argc++;
+        typec(c, field);
     }
-    token = NULL;
-    // run command
-    command = NULL;
-    argc = 0;
-
-    free(args);
-    
-
-    // char *token = strtok(input, "|");
-    // FILE *in = stdin;
-    // FILE *out = stdout;
-    // int i = 0;
-    // int pipes[10][2];
-
-    // printf("> in: %d, out: %d, err %d\n", stdin, stdout, stderr);
-    // while(token != NULL){
-    //     char *next_token = strtok(NULL, "|");
-    //     if(next_token != NULL ){
-    //         if ( pipe(pipes[i]) ){
-    //             fprintf (stderr, "Pipe failed.\n");
-    //             return EXIT_FAILURE;
-    //         }
-    //         close(pipes[i][0]);
-    //         out = fdopen(pipes[i][0], "r");
-    //         command(token, cursor, in, out, stderr);
-    //         close(pipes[i][1]);
-    //         in = fdopen(pipes[i][1], "w");
-    //     }
-    //     else{
-    //         command(token, cursor, in, stdout, stderr);
-    //     }
-    //     token = next_token;
-    //     i++;
-    // }
-    // input[0] = '\0';
+    return 0;
 }
 
 int main() {
@@ -455,7 +494,7 @@ int main() {
         printf("jakiś błąd");
     
     typingField field;
-    char input_bufor[256] = "";
+    char input_bufor[STR_BUFOR_SIZE] = "";
     // *field.input = "";
     field.start = input_bufor;
     field.cursor = input_bufor;
@@ -471,79 +510,14 @@ int main() {
     while(1){
         fflush(stdout);
         fflush(stdin);
-        c = getchar();
         // int len = strlen(input);
         // int len = field.len;
-        if(c=='\e'){
-            if((c=getchar()) == '['){ // wciśnięto strzałke
-                c = getchar();
-                if(c=='D'){ // LEFT
-                    move_cursor(-1, &field);
-                }
-                else if(c=='C'){ // RIGHT
-                    move_cursor(1, &field);
-                }
-                else if(c=='A' || c=='B'){ // UP||DOWN
-                    printf("↓↑");
-                }
-                // else if(c=='1' && getchar()==';' && getchar()=='5'){ // trzymany ctrl
-                //     c = getchar();
-                //     int i = len - backspace;
-                //     if(c=='D' && i>0){ // LEFT
-                //         do{
-                //             i--;
-                //             printf("\b");
-                //             backspace+=1;
-                //         }while (i>0 && (input[i-1]!=' ' || input[i]==' '));
-                //     }
-                //     else if(c=='C' && i<len){ // RIGHT
-                //         do{
-                //             i++;
-                //             printf("\e[C");
-                //             backspace-=1;
-                //         }while (i<len && (input[i-1]!=' ' || input[i]==' '));
-                //     }
-                //     else{printf("[[[%c]]]",c);}
-                // }
-                else { printf("[[%c]]",c); }
-            }
-            else if (c=='\e'){ printf("\n"); break; }
-            else { printf("[%c]",c); }
-            continue;
-        }
-        // else if (c<=26){ //operacje z ctrl
-        //     char d = c+64;
-        //     if(d=='W'){ //backspace
-        //         // while (/* condition */)
-        //         // {
-        //         //     /* code */
-        //         // } 
-        //         // delete_back(input, &len, backspace);
-        //         Sbackspace(&field);
-        //     }
-        //     else{
-        //         printf("^%c", d);
-        //     }
-        // }
-        else if (c==127){ //backspace
-            backspace(&field);
-        }
-        else if (c=='\n'){
-            // printf("[%d/%d]", field.cursor, field.len);
-            // printf("\n[%s|%d|%d]\n", field.input, field.cursor, field.len);
-            // field.input[0]='\0';
-            // field.input[1]='\0';
-            // field.len = 0;
-            // field.cursor = 0;
-            // parse_input(field.input, cursor);
-            // show_prompt(cursor);
-        }
-        else{
-            typec(c, &field);
-        }
+        if (input_char(&field)) break;
+        
     }
 
     uncanon(&old);
     free(cursor);
+    printf("\nkoniec\n");
     return 0;
 }
