@@ -399,18 +399,29 @@ void show_prompt(char *cursor){
 //     // input[0] = '\0';
 // }
 
-commandArgs get_command(typingField *field){
-    commandArgs command;
-    char comstr[STR_BUFOR_SIZE];
-    strcpy(comstr, field->start);
+
+void get_command(commandArgs *command, char *bufor, typingField *field){
+    // char comstr[STR_BUFOR_SIZE];
+    strcpy(bufor, field->start);
     clear_field(field);
-    command.name = strtok(comstr, " ");
-    command.argc = 0;
-    char *s;
-    while( (command.args[command.argc] = strtok(NULL, " ")) != NULL ){
-        command.argc++;
+    command->name = strtok(bufor, " ");
+    command->argc = 0;
+    char *token = strtok(NULL, " ");
+    while( token != NULL ){
+        command->args[command->argc] = token;
+        command->argc++;
+        token = strtok(NULL, " ");
     }
-    return command;
+    // return command;
+}
+void run_command(typingField *field){
+    char comstr[STR_BUFOR_SIZE];
+    commandArgs command;
+    get_command(&command, comstr, field);
+    printf("\nrunning: %s\n", command.name);
+    for(int i = 0; i < command.argc; i++){
+        printf("> %s\n", command.args[i]);
+    }
 }
 
 int input_char(typingField *field){
@@ -461,7 +472,8 @@ int input_char(typingField *field){
             tail_to_cursor(field->cursor - delta, field);
         }
         else if (d=='J'){//ENTER
-            printf("\n[%s]", field->start);
+            // printf("\n[%s]", field->start);
+            run_command(field);
         } 
         else if (d=='D'){// INTERUPT
             return 1;
@@ -478,6 +490,7 @@ int input_char(typingField *field){
     }
     return 0;
 }
+
 
 int main() {
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
