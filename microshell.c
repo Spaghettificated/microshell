@@ -23,23 +23,28 @@
 #define NOCOLOR_BOLD "\x1B[1;0;0m"
 #define BOLD "\x1B[1m"
 
-// const int STR_BUFOR_SIZE = 256;
-// const int ARG_BUFOR_SIZE = 64;
-
 #define STR_BUFOR_SIZE 256
 #define ARG_BUFOR_SIZE 64
-
-typedef struct typingField{
-    char *start;
-    char *cursor;
-    char *end;
-}typingField;
 
 typedef struct commandArgs{
     char *name;
     char *args[ARG_BUFOR_SIZE];
     int argc;
 }commandArgs;
+
+typedef struct streams{
+    FILE *__restrict__ in;
+    FILE *__restrict__ out;
+    FILE *__restrict__ err;
+}streams;
+
+
+#ifndef typing_fields
+typedef struct typingField{
+    char *start;
+    char *cursor;
+    char *end;
+}typingField;
 
 int bound_dist(char *ptr, typingField *field){
     if(ptr > field->end) return ptr - field->end;
@@ -135,7 +140,9 @@ void clear_field(typingField *field){
     field->cursor = field->start;
     field->end = field->start;
 }
+#endif
 
+#ifndef built_ins
 int check_in_path(char *path, char *name){
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
     DIR *dir = opendir(path);
@@ -150,13 +157,13 @@ int check_in_path(char *path, char *name){
     }
     return 0;
 }
-void ls(char *path, FILE* out){
+void ls(commandArgs command, char *cursor, streams streams){
     DIR *dir;
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
-    dir = opendir(path);
+    dir = opendir(cursor);
     if (dir) {
         while ((entry = readdir(dir)) != NULL) {
-            fprintf(out, "%s\n", entry->d_name);
+            fprintf(streams.out, "%s\n", entry->d_name);
         }
         closedir(dir);
     }
@@ -221,8 +228,11 @@ int move_path(char *to_move, char *path){
     }
     return 0;
 }
-int cd(char *cursor, char *path, FILE* err){
-    char new_cursor[250];
+int cd(commandArgs command, char *cursor, streams streams){
+    if(command.argc<1) return 1;
+    char *path = command.args[0];
+
+    char new_cursor[STR_BUFOR_SIZE];
     if (path[0] != '/'){
         strcpy(new_cursor, cursor);
     }
@@ -231,26 +241,35 @@ int cd(char *cursor, char *path, FILE* err){
         return 0;
     }
     else{
-        fprintf(err, "cd: path not found [%s] -> [%s]\n", new_cursor, path);
+        fprintf(streams.err, "cd: path not found [%s] -> [%s]\n", new_cursor, path);
         return 1;
     }
 }
-
-int echo(char *message, FILE *out){
-    printf("\t\t> echo: '%s' to %d\n", message, out);
-    fprintf(out, "%s\n", message);
-    return 0;
-}
-int cat(FILE *in, FILE *out){
-    // printf("\t\t> cat from %d to %d: \n", in, out);
-    char buffer[256];
-    while(fgets(buffer, sizeof(buffer), in) != NULL){
-        // printf("\t\t %s", buffer);
-        fprintf(out, buffer);
+int echo(commandArgs command, char *cursor, streams streams){
+    for(int i = 0; i<command.argc; i++){
+        char *message = command.args[i];
+        // printf("\t\t> echo: '%s' to %d\n", message, streams.out);
+        fprintf(streams.out, "%s\n", message);
     }
     return 0;
 }
+int cat(commandArgs command, char *cursor, streams streams){
+    // printf("\t\t> cat from %d to %d: \n", in, out);
+    if(command.argc < 1){
+        char buffer[256];
+        while(fgets(buffer, sizeof(buffer), streams.in) != NULL){
+            // printf("\t\t %s", buffer);
+            fprintf(streams.out, buffer);
+        }
+        return 0;
+    }
+    else{
+        fprintf(streams.out, "TODO: cat files");
+    }
+}
+#endif
 
+#ifndef history
 void save(char *entry){
     FILE *history = fopen("history", "a");
     fprintf(history, "%s\n", entry);
@@ -267,18 +286,20 @@ char *load(char *out){
     out[strlen(out)-1] = '\0';
     return out;
 }
+#endif
 
-int command(char *input, char *cursor, FILE *in, FILE *out, FILE *err){
-    printf("\t> running command '%s' \n", input);
-         if(!strncmp(input,"exit",4))   { exit(0); }
-    else if(!strncmp(input,"ls",2))     { ls(cursor, out); }
-    else if(!strncmp(input,"cd",2))     { cd(cursor, input+3, err); }
-    else if(!strncmp(input,"echo",4))   { echo(input+4, out); }
-    else if(!strncmp(input,"cat",3))    { cat(in, out); }
-    else                                { printf("lol, co?!?!??\n"); }
-    clearerr(stdin);
-}
+// int command(char *input, char *cursor, FILE *in, FILE *out, FILE *err){
+//     printf("\t> running command '%s' \n", input);
+//          if(!strncmp(input,"exit",4))   { exit(0); }
+//     else if(!strncmp(input,"ls",2))     { ls(cursor, out); }
+//     else if(!strncmp(input,"cd",2))     { cd(cursor, input+3, err); }
+//     else if(!strncmp(input,"echo",4))   { echo(input+4, out); }
+//     else if(!strncmp(input,"cat",3))    { cat(in, out); }
+//     else                                { printf("lol, co?!?!??\n"); }
+//     clearerr(stdin);
+// }
 
+#ifndef terminal_tricks
 void canon(struct termios *old){
     if (tcgetattr(0, old) < 0)
             perror("tcsetattr()");
@@ -303,11 +324,12 @@ void show_prompt(char *cursor){
     printf(CYAN);
     printf("[%s@%s", getenv("USER"), hostname, cursor);
     printf(WHITE);
-    printf(" %s", hostname, cursor);
+    printf(" %s", cursor);
     printf(CYAN);
     printf("]$ ");
     printf(NOCOLOR);
 }
+#endif
 
 // void parse_input(char *input, char *cursor){
 //     save(input);
@@ -399,7 +421,7 @@ void show_prompt(char *cursor){
 //     // input[0] = '\0';
 // }
 
-
+#ifndef handle_commands
 void get_command(commandArgs *command, char *bufor, typingField *field){
     // char comstr[STR_BUFOR_SIZE];
     strcpy(bufor, field->start);
@@ -412,16 +434,27 @@ void get_command(commandArgs *command, char *bufor, typingField *field){
         command->argc++;
         token = strtok(NULL, " ");
     }
-    // return command;
+    if (command->name==NULL){
+        command->name = "";
+    }
 }
-void run_command(typingField *field){
+int run_command(typingField *field, char *cursor, streams streams){
+    printf("\n");
     char comstr[STR_BUFOR_SIZE];
     commandArgs command;
     get_command(&command, comstr, field);
-    printf("\nrunning: %s\n", command.name);
-    for(int i = 0; i < command.argc; i++){
-        printf("> %s\n", command.args[i]);
+    if(!strncmp(command.name,"exit",4))   { return 1; }
+    else if(!strncmp(command.name,"ls",2))     { ls(command, cursor, streams); }
+    else if(!strncmp(command.name,"cd",2))     { cd(command, cursor, streams); }
+    else if(!strncmp(command.name,"echo",4))   { echo(command, cursor, streams); }
+    else if(!strncmp(command.name,"cat",3))    { cat(command, cursor, streams); }
+    else{
+        printf("\nrunning command: %s\n", command.name);
+        for(int i = 0; i < command.argc; i++){
+            printf("> %s\n", command.args[i]);
+        }
     }
+    return 0;
 }
 
 int input_char(typingField *field){
@@ -473,7 +506,8 @@ int input_char(typingField *field){
         }
         else if (d=='J'){//ENTER
             // printf("\n[%s]", field->start);
-            run_command(field);
+            // return run_command(field);
+            return 1;
         } 
         else if (d=='D'){// INTERUPT
             return 1;
@@ -491,6 +525,7 @@ int input_char(typingField *field){
     return 0;
 }
 
+#endif
 
 int main() {
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
@@ -514,23 +549,28 @@ int main() {
     field.end = input_bufor;
 
 
-    // int backspace = 0;
-    show_prompt(cursor);
-    char c;
-
     struct termios old = {0};
     canon(&old);
+    streams streams;
+    streams.in = stdin;
+    streams.out = stdout;
+    streams.err = stderr;
+    show_prompt(cursor);
     while(1){
         fflush(stdout);
         fflush(stdin);
         // int len = strlen(input);
         // int len = field.len;
-        if (input_char(&field)) break;
-        
+        if (input_char(&field)) {
+            if (run_command(&field, cursor, streams)){
+                break;
+            }
+            show_prompt(cursor);
+        };
     }
 
     uncanon(&old);
     free(cursor);
-    printf("\nkoniec\n");
+    printf("koniec\n");
     return 0;
 }
