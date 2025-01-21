@@ -30,7 +30,7 @@
 
 typedef struct commandArgs{
     char *name;
-    char *args[ARG_BUFOR_SIZE];
+    char *argv[ARG_BUFOR_SIZE];
     int argc;
 }commandArgs;
 
@@ -231,8 +231,8 @@ int move_path(char *to_move, char *path){
     return 0;
 }
 int cd(commandArgs command, char *cursor, streams streams){
-    if(command.argc<1) return 1;
-    char *path = command.args[0];
+    if(command.argc<=1) return 1;
+    char *path = command.argv[1];
 
     char new_cursor[STR_BUFOR_SIZE];
     if (path[0] != '/'){
@@ -248,8 +248,8 @@ int cd(commandArgs command, char *cursor, streams streams){
     }
 }
 int echo(commandArgs command, char *cursor, streams streams){
-    for(int i = 0; i<command.argc; i++){
-        char *message = command.args[i];
+    for(int i = 1; i<command.argc; i++){
+        char *message = command.argv[i];
         // printf("\t\t> echo: '%s' to %d\n", message, streams.out);
         fprintf(streams.out, "%s\n", message);
     }
@@ -257,7 +257,7 @@ int echo(commandArgs command, char *cursor, streams streams){
 }
 int cat(commandArgs command, char *cursor, streams streams){
     // printf("\t\t> cat from %d to %d: \n", in, out);
-    if(command.argc < 1){
+    if(command.argc <= 1){
         char buffer[256];
         while(fgets(buffer, sizeof(buffer), streams.in) != NULL){
             // printf("\t\t %s", buffer);
@@ -414,14 +414,13 @@ void show_prompt(char *cursor){
 
 #ifndef handle_commands
 void get_command(commandArgs *command, char *bufor, typingField *field){
-    // char comstr[STR_BUFOR_SIZE];
     strcpy(bufor, field->start);
     clear_field(field);
-    command->name = strtok(bufor, " ");
+    char *token = strtok(bufor, " ");
+    command->name = token;
     command->argc = 0;
-    char *token = strtok(NULL, " ");
     while( token != NULL ){
-        command->args[command->argc] = token;
+        command->argv[command->argc] = token;
         command->argc++;
         token = strtok(NULL, " ");
     }
@@ -436,10 +435,11 @@ int run_command(typingField *field, char *cursor, streams streams){
     get_command(&command, comstr, field);
 
     if(!strncmp(command.name,"exit",4))   { return 1; }
+    else if(!strncmp(command.name,"cd",2))     { cd(command, cursor, streams); return 0;}
+
     pid_t id = fork();
     if(id==0){
         if(!strncmp(command.name,"ls",2))     { ls(command, cursor, streams); }
-        else if(!strncmp(command.name,"cd",2))     { cd(command, cursor, streams); }
         else if(!strncmp(command.name,"echo",4))   { echo(command, cursor, streams); }
         else if(!strncmp(command.name,"cat",3))    { cat(command, cursor, streams); }
         else{
@@ -453,7 +453,7 @@ int run_command(typingField *field, char *cursor, streams streams){
                 strcpy(bin_path, path);
                 strcat(bin_path, "/");
                 strcat(bin_path, command.name);
-                if(execv(bin_path, command.args) != -1){
+                if(execv(bin_path, command.argv) != -1){
                     found_command = 1;
                     break;
                 }
@@ -463,8 +463,9 @@ int run_command(typingField *field, char *cursor, streams streams){
             
             if(!found_command){
                 printf("nie znaleziono polecenia: %s\n", command.name);
+                // printf("args(%d):\n", command.argc);
                 // for(int i = 0; i < command.argc; i++){
-                //     printf("> %s\n", command.args[i]);
+                //     printf("> %s\n", command.argv[i]);
                 // }
             }
         }
@@ -476,7 +477,6 @@ int run_command(typingField *field, char *cursor, streams streams){
 
     return 0;
 }
-
 int input_char(typingField *field){
     char c = getchar();
     if(c=='\e'){
@@ -544,7 +544,6 @@ int input_char(typingField *field){
     }
     return 0;
 }
-
 #endif
 
 int main() {
@@ -582,9 +581,11 @@ int main() {
         // int len = strlen(input);
         // int len = field.len;
         if (input_char(&field)) {
+            uncanon(&old);
             if (run_command(&field, cursor, streams)){
                 break;
             }
+            canon(&old);
             show_prompt(cursor);
         };
     }
