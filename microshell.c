@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #define RED   "\x1B[31m"
 #define GREEN   "\x1B[32m"
@@ -288,17 +290,6 @@ char *load(char *out){
 }
 #endif
 
-// int command(char *input, char *cursor, FILE *in, FILE *out, FILE *err){
-//     printf("\t> running command '%s' \n", input);
-//          if(!strncmp(input,"exit",4))   { exit(0); }
-//     else if(!strncmp(input,"ls",2))     { ls(cursor, out); }
-//     else if(!strncmp(input,"cd",2))     { cd(cursor, input+3, err); }
-//     else if(!strncmp(input,"echo",4))   { echo(input+4, out); }
-//     else if(!strncmp(input,"cat",3))    { cat(in, out); }
-//     else                                { printf("lol, co?!?!??\n"); }
-//     clearerr(stdin);
-// }
-
 #ifndef terminal_tricks
 void canon(struct termios *old){
     if (tcgetattr(0, old) < 0)
@@ -443,17 +434,46 @@ int run_command(typingField *field, char *cursor, streams streams){
     char comstr[STR_BUFOR_SIZE];
     commandArgs command;
     get_command(&command, comstr, field);
+
     if(!strncmp(command.name,"exit",4))   { return 1; }
-    else if(!strncmp(command.name,"ls",2))     { ls(command, cursor, streams); }
-    else if(!strncmp(command.name,"cd",2))     { cd(command, cursor, streams); }
-    else if(!strncmp(command.name,"echo",4))   { echo(command, cursor, streams); }
-    else if(!strncmp(command.name,"cat",3))    { cat(command, cursor, streams); }
-    else{
-        printf("\nrunning command: %s\n", command.name);
-        for(int i = 0; i < command.argc; i++){
-            printf("> %s\n", command.args[i]);
+    pid_t id = fork();
+    if(id==0){
+        if(!strncmp(command.name,"ls",2))     { ls(command, cursor, streams); }
+        else if(!strncmp(command.name,"cd",2))     { cd(command, cursor, streams); }
+        else if(!strncmp(command.name,"echo",4))   { echo(command, cursor, streams); }
+        else if(!strncmp(command.name,"cat",3))    { cat(command, cursor, streams); }
+        else{
+            char *paths = getenv("PATH");
+            char *path = strtok(paths,":");
+            char bin_path[STR_BUFOR_SIZE];
+            
+            int found_command=0;
+            while (path != NULL)
+            {
+                strcpy(bin_path, path);
+                strcat(bin_path, "/");
+                strcat(bin_path, command.name);
+                if(execv(bin_path, command.args) != -1){
+                    found_command = 1;
+                    break;
+                }
+                // printf("PATH = %s: %d\n", bin_path, ok);
+                path = strtok(NULL,":");
+            }
+            
+            if(!found_command){
+                printf("nie znaleziono polecenia: %s\n", command.name);
+                // for(int i = 0; i < command.argc; i++){
+                //     printf("> %s\n", command.args[i]);
+                // }
+            }
         }
+        exit(0);
     }
+    else{
+        wait(NULL);
+    }
+
     return 0;
 }
 
