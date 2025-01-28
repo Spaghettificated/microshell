@@ -46,6 +46,7 @@ typedef struct typingField{
     char *start;
     char *cursor;
     char *end;
+    int backtrack;
 }typingField;
 
 int bound_dist(char *ptr, typingField *field){
@@ -102,6 +103,14 @@ void typec(char c, typingField *field){
     insertc(c1, field);
     set_cursor(from+1, field);
 }
+void types(char *s, typingField *field){
+    char *ptr = s;
+    while (*ptr != '\0'){
+        typec(*ptr, field);
+        ptr++;
+    }
+    
+}
 void tail_to_cursor(char* tail_pos, typingField *field){
     char *to = field->cursor;
     do{
@@ -138,9 +147,11 @@ char *token_right(char* start, typingField *field){
     return start;
 }
 void clear_field(typingField *field){
-    *field->start = '\0';
-    field->cursor = field->start;
-    field->end = field->start;
+    // *field->start = '\0';
+    // field->cursor = field->start;
+    // field->end = field->start;
+    set_cursor(field->start, field);
+    tail_to_cursor(field->end, field);
 }
 #endif
 
@@ -272,9 +283,14 @@ int cat(commandArgs command, char *cursor, streams streams){
 #endif
 
 #ifndef history
-void save(char *entry){
+// typedef struct history{
+//     char *entries[STR_BUFOR_SIZE];
+//     int count;
+//     int current;
+// }history;
+void save_entry(char *entry){
     FILE *history = fopen("history", "a");
-    fprintf(history, "%s\n", entry);
+    fprintf(history, "\n%s", entry);
     fclose(history);
 }
 char *load(char *out){
@@ -287,6 +303,69 @@ char *load(char *out){
     fclose(history);
     out[strlen(out)-1] = '\0';
     return out;
+}
+char *get_entry(char *out, int t){
+    char buffer[64];
+    FILE *history = fopen("history", "r");
+    int n = 0;
+    while(fgets(buffer, sizeof(buffer), history)!=NULL){
+        // printf("\nread buffer: ");
+        // printf("\nread buffer: %s\n", buffer);
+        char *ptr = buffer;
+        char *entrystart = NULL;
+        while (*ptr != '\0')
+        {
+            if(*ptr == '\n'){
+                // printf("\\n", buffer);
+                n++;
+                if(n==t){
+                    entrystart = ptr+1;
+                }
+                if(n>t){
+                    // ptr++;
+                    *ptr = '\0';
+                    break;
+                }
+            }
+            // else printf("%c", *ptr);
+            ptr++;
+        }
+        if(n<t){
+            continue;
+        }
+
+        if(entrystart!=NULL){
+            strcpy(out, entrystart);
+        }
+        else{
+            strcat(out, buffer);
+        }
+
+        if(n>t){
+            ptr = '\0';
+            break;
+        }
+        
+        // printf(">%s", buffer);
+    }
+    fclose(history);
+    // out[strlen(out)-1] = '\0';
+    return out;
+}
+int histlen(){
+    char buffer[64];
+    FILE *history = fopen("history", "r");
+    int n = 0;
+    while(fgets(buffer, sizeof(buffer), history)!=NULL){
+        char *ptr = buffer;
+        while (*ptr != '\0'){
+            if(*ptr == '\n'){
+                n++;
+            }
+            ptr++;
+        }
+    }
+    return n+1;
 }
 #endif
 
@@ -478,7 +557,7 @@ int run_command(typingField *field, char *cursor, streams streams){
 
     return 0;
 }
-int input_char(typingField *field){
+int input_char(typingField *field, int hlen){
     char c = getchar();
     if(c=='\e'){
         if((c=getchar()) == '['){ // wciśnięto strzałke
@@ -489,8 +568,29 @@ int input_char(typingField *field){
             else if(c=='C'){ // RIGHT
                 move_cursor(1, field);
             }
-            else if(c=='A' || c=='B'){ // UP||DOWN
-                printf("↓↑");
+            else if(c=='A'){ // UP
+                field->backtrack++;
+                // field->backtrack = field->backtrack<hlen ? field->backtrack : hlen;
+                if(hlen - field->backtrack >= 0){
+                    clear_field(field);
+                    char s[STR_BUFOR_SIZE];
+                    get_entry(s, hlen - field->backtrack);
+                    types(s, field);
+                }
+                else field->backtrack--;
+            } 
+            else if (c=='B'){ // DOWN
+                field->backtrack--;
+                if(field->backtrack > 0){
+                    clear_field(field);
+                    char s[STR_BUFOR_SIZE];
+                    get_entry(s, hlen - field->backtrack);
+                    types(s, field);
+                }
+                else if(field->backtrack == 0){
+                    clear_field(field);
+                }
+                else field->backtrack++;
             }
             else if(c=='1' && getchar()==';' && getchar()=='5'){ // trzymany ctrl
                 c = getchar();
@@ -548,6 +648,8 @@ int input_char(typingField *field){
 #endif
 
 int main() {
+    int hlen = histlen();
+
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
     char *cursor = (char *)malloc((size_t)size);
     // czemu potrzebny osobny bufer???
@@ -567,6 +669,7 @@ int main() {
     field.start = input_bufor;
     field.cursor = input_bufor;
     field.end = input_bufor;
+    field.backtrack = 0;
 
 
     struct termios old = {0};
@@ -581,16 +684,17 @@ int main() {
         fflush(stdin);
         // int len = strlen(input);
         // int len = field.len;
-        if (input_char(&field)) {
+        if (input_char(&field, hlen)) {
+            save_entry(field.start);
             uncanon(&old);
             if (run_command(&field, cursor, streams)){
                 break;
             }
+            hlen++;
             canon(&old);
             show_prompt(cursor);
         };
     }
-
     uncanon(&old);
     free(cursor);
     printf("koniec\n");
