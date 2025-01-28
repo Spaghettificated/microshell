@@ -319,6 +319,7 @@ void show_prompt(char *cursor){
     printf(CYAN);
     printf("]$ ");
     printf(NOCOLOR);
+    printf(WHITE);
 }
 #endif
 
