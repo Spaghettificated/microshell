@@ -156,10 +156,6 @@ void clear_field(typingField *field){
 #endif
 
 #ifndef paths
-typedef struct path_cursor{
-    char *path;
-    char *user;
-}path_cursor;
 int check_in_path(char *path, char *name){
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
     DIR *dir = opendir(path);
@@ -394,14 +390,14 @@ void uncanon(struct termios *old){
             perror ("tcsetattr ~ICANON");
 }
 
-void show_prompt(path_cursor cursor){
+void show_prompt(char * cursor){
     char hostname[256];
     if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
     printf(BOLD);
     printf(CYAN);
-    printf("[%s@%s", cursor.user, hostname);
+    printf("[%s@%s", getenv("USER"), hostname);
     printf(WHITE);
-    printf(" %s", cursor.path);
+    printf(" %s", cursor);
     printf(CYAN);
     printf("]$ ");
     printf(NOCOLOR);
@@ -515,20 +511,20 @@ void get_command(commandArgs *command, char *bufor, typingField *field){
         command->name = "";
     }
 }
-int run_command(typingField *field, path_cursor cursor, streams streams){
+int run_command(typingField *field, char* cursor, streams streams){
     printf("\n");
     char comstr[STR_BUFOR_SIZE];
     commandArgs command;
     get_command(&command, comstr, field);
 
     if(!strncmp(command.name,"exit",4))   { return 1; }
-    else if(!strncmp(command.name,"cd",2))     { cd(command, cursor.path, streams); return 0;}
+    else if(!strncmp(command.name,"cd",2))     { cd(command, cursor, streams); return 0;}
 
     pid_t id = fork();
     if(id==0){
-        if(!strncmp(command.name,"ls",2))     { ls(command, cursor.path, streams); }
-        else if(!strncmp(command.name,"echo",4))   { echo(command, cursor.path, streams); }
-        else if(!strncmp(command.name,"cat",3))    { cat(command, cursor.path, streams); }
+        if(!strncmp(command.name,"ls",2))     { ls(command, cursor, streams); }
+        else if(!strncmp(command.name,"echo",4))   { echo(command, cursor, streams); }
+        else if(!strncmp(command.name,"cat",3))    { cat(command, cursor, streams); }
         else{
             char *paths = getenv("PATH");
             char *path = strtok(paths,":");
@@ -657,18 +653,15 @@ int input_char(typingField *field, int hlen){
 int main() {
     int hlen = histlen();
 
-    path_cursor cursor;
-    cursor.user = getenv("USER");
-    printf(getenv("HOME"));
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
-    cursor.path = (char *)malloc((size_t)size);
+    char *cursor = (char *)malloc((size_t)size);
     // czemu potrzebny osobny bufer???
     // char *cursor;
     // char *buffer = (char *)malloc((size_t)size); 
     // if ((buffer != NULL)){
     //     cursor = getcwd(buffer, (size_t)size);
-    if ((cursor.path != NULL)){ // działa bez niego wtf?
-        getcwd(cursor.path, (size_t)size);
+    if ((cursor != NULL)){ // działa bez niego wtf?
+        getcwd(cursor, (size_t)size);
     }
     else
         printf("jakiś błąd");
@@ -707,7 +700,7 @@ int main() {
         };
     }
     uncanon(&old);
-    free(cursor.path);
+    free(cursor);
     printf("koniec\n");
     return 0;
 }
