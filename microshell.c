@@ -170,50 +170,27 @@ int check_in_path(char *path, char *name){
     }
     return 0;
 }
-char *take_path_token(char **path){ // consumes path
-    // printf("\ttaking token from [%s] [%d]\n", *path, *path[0] == '/');
-    if (*path[0] == '/'){
-        *path = *path + 1;
-        // printf("\ttaking token from [%s] [%d]\n", *path, *path[0] == '/');
-        return "/";
+int move_path(char *from, char *path){
+    if(!strncmp(path,"/",1)){
+        strcpy(from, "/");
+        path++;
     }
-    else{
-        char *new_path = strchr(*path, '/');
-        if(new_path == NULL){
-            char *out = *path;
-            *path = strchr(*path, '\0');
-            return out;
-        }
-        else{
-            char *out = *path;
-            new_path[0] = '\0';
-            *path = new_path + 1;
-            return out; 
-        }
+    else if (!strcmp(path,"~") || !strncmp(path,"~/",2)){
+        strcpy(from, getenv("HOME"));
+        path++;
     }
-}
-int read_path(char *from, char *path){
-    while (path[0] != '\0')
-    {
-        // printf("path [%s]\n", path);
-        char *token = take_path_token(&path);
-
-        // printf("token [%s]\t\tpath [%s]\n\n", token, path);
-
-        if(!strcmp(token, "/")){
-            strcpy(from, token);
-            return read_path(from, path);
-        }
-        else if(!strcmp(token, ".")){
-            return read_path(from, path);
+    char *token = strtok(path,"/");
+    while(token != NULL){
+        if(!strcmp(token, ".")){
+            // continue;
         }
         else if(!strcmp(token, "..")){
             char *slash = strrchr(from, '/');
             if (slash == from)
                 slash[1] = '\0';
-            else
+            else if (slash != NULL)
                 slash[0] = '\0';
-            return read_path(from, path);
+            // continue;
         }
         else{
             if( !check_in_path(from, token) ){
@@ -224,11 +201,13 @@ int read_path(char *from, char *path){
                 if (to_move_end[-1] != '/')
                     strcat(from, "/");
                 strcat(from, token);
-                return read_path(from, path);
+                // return move_path(from, path);
             }
         }
+
+        token = strtok(NULL,"/");
     }
-    return 0;
+    
 }
 #endif
 
@@ -252,7 +231,7 @@ int cd(commandArgs command, char *cursor, streams streams){
     if (path[0] != '/'){
         strcpy(new_cursor, cursor);
     }
-    if (!read_path(new_cursor, path)){
+    if (!move_path(new_cursor, path)){
         strcpy(cursor, new_cursor);
         return 0;
     }
@@ -652,7 +631,7 @@ int input_char(typingField *field, int hlen){
 
 int main() {
     int hlen = histlen();
-
+    printf(getenv("HOME"));
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
     char *cursor = (char *)malloc((size_t)size);
     // czemu potrzebny osobny bufer???
