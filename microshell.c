@@ -213,9 +213,9 @@ int move_path(char *from, char *path){
 
 #ifndef flags
 typedef struct flag_info{
-    int flagc;
-    char *c_flags;
-    char *s_flags
+    int flags;
+    int argc;
+    int argid[ARG_BUFOR_SIZE];
 }flag_info;
 // 0 - not flag, 1 - short flag, 2 - long flag
 int flag_type(char *str){
@@ -228,7 +228,8 @@ int flag_type(char *str){
     return 0;
 }
 int is_flag(char *str, int type, char c_flag, char* s_flag){
-    if (type == 1 && c_flag != NULL && strchr(str, c_flag) != NULL){
+    // if (type == 1 && c_flag != NULL && strchr(str, c_flag) != NULL){
+    if (type == 1 && strchr(str, c_flag) != NULL){
         return 1;
     }
     if (type == 2 && s_flag != NULL && strcmp(str+2, s_flag)){
@@ -255,6 +256,23 @@ int get_flags(char *str, char *c_flags, char *s_flags[]){
     out = n<=0 ? out : 0;
     return out;
 }
+flag_info get_flag_info(commandArgs command, char *c_flags, char *s_flags[]){
+    flag_info out;
+    out.flags = 0;
+    out.argc = 0;
+    for(int i = 1; i < command.argc; i++){
+        int f = get_flags(command.argv[i], c_flags, s_flags);
+        out.flags |= f;
+        if (f==0){
+            out.argid[out.argc] = i;
+            out.argc++;
+        }
+    }
+    return out;
+}
+int has_flag(int flags, int n){
+    return flags & (1<<n);
+}
 #endif
 
 #ifndef built_ins
@@ -264,7 +282,7 @@ void ls_once(char *path, int flags, streams streams){
     dir = opendir(path);
     if (dir) {
         while ((entry = readdir(dir)) != NULL) {
-            if (!(flags & 1) && entry->d_name[0]=='.'){ // -a flag
+            if (!has_flag(flags, 0) && entry->d_name[0]=='.'){ // -a flag
                 continue;
             }
             fprintf(streams.out, "%s ", entry->d_name);
@@ -274,31 +292,22 @@ void ls_once(char *path, int flags, streams streams){
     printf("\n");
 }
 void ls(commandArgs command, char *cursor, streams streams){
-    int flags = 0;
-    int n = 0;
-    int idx[ARG_BUFOR_SIZE];
-    for(int i = 1; i < command.argc; i++){
-        int f = get_flags(command.argv[i], "a", (char*[]){"all",});
-        flags |= f;
-        if (f==0){
-            idx[n] = i;
-            n++;
-        }
-    }
+    flag_info flags = get_flag_info(command, "a", (char*[]){"all",});
+    int n = flags.argc;
 
     if (n==0){
-        ls_once(cursor, flags, streams);
+        ls_once(cursor, flags.flags, streams);
         return;
     }
 
     for(int i = 0; i < n ; i++){
-        int j = idx[i];
+        int j = flags.argid[i];
         char path[STR_BUFOR_SIZE];
         strcpy(path, cursor);
         move_path(path, command.argv[j]);
         if(n>1) printf("%s:\n", command.argv[j]);
-        ls_once(path, flags, streams);
-        if(n>1 && j != n-1) printf("\n");
+        ls_once(path, flags.flags, streams);
+        if(n>1 && i != n-1) printf("\n");
     }
 }
 int cd(commandArgs command, char *cursor, streams streams){
@@ -708,9 +717,6 @@ int input_char(typingField *field, int hlen){
 #endif
 
 int main() {
-    printf("%d\n", flag_type("-b") );
-    char *a[] = {"a","b","c"}; 
-    printf("%d\n", get_flags("--a", "abc", (char*[]){"a","b","n"} ) );
     int hlen = histlen();
     printf(getenv("HOME"));
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
