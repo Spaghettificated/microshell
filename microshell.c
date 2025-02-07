@@ -267,23 +267,39 @@ void ls_once(char *path, int flags, streams streams){
             if (!(flags & 1) && entry->d_name[0]=='.'){ // -a flag
                 continue;
             }
-            fprintf(streams.out, "%s\n", entry->d_name);
+            fprintf(streams.out, "%s ", entry->d_name);
         }
         closedir(dir);
     }
+    printf("\n");
 }
 void ls(commandArgs command, char *cursor, streams streams){
     int flags = 0;
     int n = 0;
-    for(int i = 0; i < command.argc; i++){
+    int idx[ARG_BUFOR_SIZE];
+    for(int i = 1; i < command.argc; i++){
         int f = get_flags(command.argv[i], "a", (char*[]){"all",});
         flags |= f;
-        if (f==0)
+        if (f==0){
+            idx[n] = i;
             n++;
+        }
     }
-    char path[STR_BUFOR_SIZE];
-    strcpy(path, cursor);
-    ls_once(path, flags, streams);
+
+    if (n==0){
+        ls_once(cursor, flags, streams);
+        return;
+    }
+
+    for(int i = 0; i < n ; i++){
+        int j = idx[i];
+        char path[STR_BUFOR_SIZE];
+        strcpy(path, cursor);
+        move_path(path, command.argv[j]);
+        if(n>1) printf("%s:\n", command.argv[j]);
+        ls_once(path, flags, streams);
+        if(n>1 && j != n-1) printf("\n");
+    }
 }
 int cd(commandArgs command, char *cursor, streams streams){
     if(command.argc<=1) return 1;
