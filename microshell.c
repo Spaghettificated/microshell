@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <dirent.h> 
 #include <unistd.h>
@@ -163,12 +164,25 @@ int check_in_path(char *path, char *name){
         while ((entry = readdir(dir)) != NULL) {
             if (!strcmp(entry->d_name, name)){
                 closedir(dir);
-                return 1;
+                return entry->d_type;
             }
         }
         closedir(dir);
     }
-    return 0;
+    return -1;
+}
+int check_path(char *path){
+    if (*path != '/'){
+        printf("wtff?"); return -1;
+    }
+
+    char *div = strrchr(path,'/');
+    if(div[1] == '\0')
+        return DT_DIR;
+    *div = '\0';
+    int type = check_in_path(path, div+1);
+    *div = '/';
+    return type;
 }
 int move_path(char *from, char *path){
     if(!strncmp(path,"/",1)){
@@ -193,21 +207,21 @@ int move_path(char *from, char *path){
             // continue;
         }
         else{
-            if( !check_in_path(from, token) ){
-                return 1;
-            }
-            else{
+            // if( !check_in_path(from, token) ){
+            //     return 1;
+            // }
+            // else{
                 char *to_move_end = strchr(from, '\0');
                 if (to_move_end[-1] != '/')
                     strcat(from, "/");
                 strcat(from, token);
-                // return move_path(from, path);
-            }
+            //     // return move_path(from, path);
+            // }
         }
 
         token = strtok(NULL,"/");
     }
-    
+    return 0;
 }
 #endif
 
@@ -305,6 +319,12 @@ void ls(commandArgs command, char *cursor, streams streams){
         char path[STR_BUFOR_SIZE];
         strcpy(path, cursor);
         move_path(path, command.argv[j]);
+            
+        if (check_path(path) != DT_DIR){
+            printf("path error: %s\n", path);
+            if(n>1 && i != n-1) printf("\n");
+            continue;
+        }
         if(n>1) printf("%s:\n", command.argv[j]);
         ls_once(path, flags.flags, streams);
         if(n>1 && i != n-1) printf("\n");
@@ -318,7 +338,8 @@ int cd(commandArgs command, char *cursor, streams streams){
     if (path[0] != '/'){
         strcpy(new_cursor, cursor);
     }
-    if (!move_path(new_cursor, path)){
+    move_path(new_cursor, path);
+    if (check_path(new_cursor) == DT_DIR){
         strcpy(cursor, new_cursor);
         return 0;
     }
@@ -732,7 +753,6 @@ int input_char(typingField *field, int hlen){
 
 int main() {
     int hlen = histlen();
-    printf(getenv("HOME"));
     long size = pathconf(".", _PC_PATH_MAX); // https://pubs.opengroup.org/onlinepubs/007904975/functions/getcwd.html
     char *cursor = (char *)malloc((size_t)size);
     // czemu potrzebny osobny bufer???
