@@ -456,14 +456,28 @@ void uncanon(struct termios *old){
             perror ("tcsetattr ~ICANON");
 }
 
-void show_prompt(char * cursor){
+void show_prompt(char *cursor){
+    char pathname[STR_BUFOR_SIZE];
+    char *home = getenv("HOME");
+    int n = strlen(home);
+    if(!strncmp(home, cursor, n)){
+        // if (cursor[n]=='\0')
+        //     strcpy(pathname, "~");
+        // else
+        //     strcpy(pathname, "~/");
+        strcpy(pathname, "~");  
+        strcat(pathname, cursor + n);
+    }
+    else{
+        strcpy(pathname, cursor);
+    }
     char hostname[256];
     if(gethostname(hostname, sizeof(hostname))==-1) {strcpy(hostname, "(null)");}
     printf(BOLD);
     printf(CYAN);
     printf("[%s@%s", getenv("USER"), hostname);
     printf(WHITE);
-    printf(" %s", cursor);
+    printf(" %s", pathname);
     printf(CYAN);
     printf("]$ ");
     printf(NOCOLOR);
