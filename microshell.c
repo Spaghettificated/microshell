@@ -331,7 +331,10 @@ void ls(commandArgs command, char *cursor, streams streams){
     }
 }
 int cd(commandArgs command, char *cursor, streams streams){
-    if(command.argc<=1) return 1;
+    if(command.argc<=1){
+        command.argc++;
+        command.argv[1] = "~";
+    }
     char *path = command.argv[1];
 
     char new_cursor[STR_BUFOR_SIZE];
