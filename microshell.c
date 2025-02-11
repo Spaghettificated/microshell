@@ -1,4 +1,4 @@
-#define _GNU_SOURCE
+#define _GNU_SOURCE // DT_DIR, DT_REG, DT_..
 #include <stdio.h>
 #include <dirent.h> 
 #include <unistd.h>
@@ -7,6 +7,8 @@
 #include <termios.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+#include <fcntl.h> // O_RDONLY
 
 #define RED   "\x1B[31m"
 #define GREEN   "\x1B[32m"
@@ -370,7 +372,23 @@ int cat(commandArgs command, char *cursor, streams streams){
         return 0;
     }
     else{
-        fprintf(streams.out, "TODO: cat files");
+        char path[STR_BUFOR_SIZE];
+        char buffer[256];
+
+        for(int i = 1; i < command.argc; i++){
+            strcpy(path, cursor);
+            move_path(path, command.argv[i]);
+            if(check_path(path) == DT_REG){
+                int fd = open(path, O_RDONLY);
+                while(read(fd, buffer, sizeof(buffer))>0){
+                    // printf("\t\t %s", buffer);
+                    fprintf(streams.out, buffer);
+                }
+                close(fd);
+            }
+            else
+                fprintf(streams.out, "%s: not a file\n", path);
+        }
     }
 }
 #endif
