@@ -639,14 +639,14 @@ int run_command(typingField *field, char* cursor, streams streams){
     commandArgs command;
     get_command(&command, comstr, field);
 
-    if(!strncmp(command.name,"exit",4))   { return 1; }
-    else if(!strncmp(command.name,"cd",2))     { cd(command, cursor, streams); return 0;}
+    if(!strcmp(command.name,"exit"))   { return 1; }
+    else if(!strcmp(command.name,"cd"))     { cd(command, cursor, streams); return 0;}
 
     pid_t id = fork();
     if(id==0){
-        if(!strncmp(command.name,"ls",2))     { ls(command, cursor, streams); }
-        else if(!strncmp(command.name,"echo",4))   { echo(command, cursor, streams); }
-        else if(!strncmp(command.name,"cat",3))    { cat(command, cursor, streams); }
+        if(!strcmp(command.name,"ls"))     { ls(command, cursor, streams); }
+        else if(!strcmp(command.name,"echo"))   { echo(command, cursor, streams); }
+        else if(!strcmp(command.name,"cat"))    { cat(command, cursor, streams); }
         else{
             char *paths = getenv("PATH");
             char *path = strtok(paths,":");
