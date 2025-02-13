@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h> // mkdir; check if file is dir / file / exist
-
+#include <errno.h> // errors
 
 #include <fcntl.h> // O_RDONLY
 
@@ -654,6 +654,7 @@ void get_command(commandArgs *command, char *bufor, typingField *field){
     if (command->name==NULL){
         command->name = "";
     }
+    command->argv[command->argc] = NULL;
 }
 int run_command(typingField *field, char* cursor, streams streams){
     printf("\n");
@@ -681,13 +682,22 @@ int run_command(typingField *field, char* cursor, streams streams){
                 strcpy(bin_path, path);
                 strcat(bin_path, "/");
                 strcat(bin_path, command.name);
+                // printf("PATH = %s: ", bin_path);
                 if(execv(bin_path, command.argv) != -1){
                     found_command = 1;
+                    // printf("%d\n", 1);
                     break;
                 }
-                printf("PATH = %s: %d\n", bin_path, found_command);
+                // printf("%s\n", strerror(errno));
                 path = strtok(NULL,":");
             }
+            // printf("PATH = %s: ", command.name);
+            // if(execvp(command.name, command.argv) != -1){
+            //     found_command = 1;
+            //     printf("%d\n", 1);
+            // }
+            // else 
+            //     printf("%s\n", strerror(errno));
             
             if(!found_command){
                 printf("nie znaleziono polecenia: {%s}\n", command.name);
@@ -823,7 +833,7 @@ int main() {
     struct termios old = {0};
     canon(&old);
     streams streams;
-    streams.in = stdin;
+    streams.in  = stdin;
     streams.out = stdout;
     streams.err = stderr;
     show_prompt(cursor);
