@@ -7,6 +7,8 @@
 #include <termios.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h> // mkdir; check if file is dir / file / exist
+
 
 #include <fcntl.h> // O_RDONLY
 
@@ -174,16 +176,22 @@ int check_in_path(char *path, char *name){
     return -1;
 }
 int check_path(char *path){
-    if (*path != '/'){
-        printf("wtff?"); return -1;
+    if (path[0] != '/'){
+        printf("wtff? somwhere the path is is just plain wrong... relative brrr"); return -1;
     }
 
     char *div = strrchr(path,'/');
     if(div[1] == '\0')
         return DT_DIR;
-    *div = '\0';
-    int type = check_in_path(path, div+1);
-    *div = '/';
+    int type;
+    if (div == path){
+        type = check_in_path("/", div+1);
+    }
+    else{
+        *div = '\0';
+        type = check_in_path(path, div+1);
+        *div = '/';
+    }
     return type;
 }
 int move_path(char *from, char *path){
@@ -349,7 +357,7 @@ int cd(commandArgs command, char *cursor, streams streams){
         return 0;
     }
     else{
-        fprintf(streams.err, "cd: path not found [%s] -> [%s]\n", new_cursor, path);
+        fprintf(streams.err, "cd: path [%s] not found [%s] -> [%s]\n", new_cursor, cursor, path);
         return 1;
     }
 }
@@ -389,6 +397,20 @@ int cat(commandArgs command, char *cursor, streams streams){
             else
                 fprintf(streams.out, "%s: not a file\n", path);
         }
+    }
+}
+int mkdir_(commandArgs command, char *cursor, streams streams){
+    char path[STR_BUFOR_SIZE];
+    char buffer[256];
+
+    for(int i = 1; i < command.argc; i++){
+        strcpy(path, cursor);
+        move_path(path, command.argv[i]);
+        if(check_path(path) < 0){
+            mkdir(path, 0700);
+        }
+        else
+            fprintf(streams.out, "%s already exist\n", path);
     }
 }
 #endif
@@ -647,6 +669,7 @@ int run_command(typingField *field, char* cursor, streams streams){
         if(!strcmp(command.name,"ls"))     { ls(command, cursor, streams); }
         else if(!strcmp(command.name,"echo"))   { echo(command, cursor, streams); }
         else if(!strcmp(command.name,"cat"))    { cat(command, cursor, streams); }
+        else if(!strcmp(command.name,"mkdir"))    { mkdir_(command, cursor, streams); }
         else{
             char *paths = getenv("PATH");
             char *path = strtok(paths,":");
