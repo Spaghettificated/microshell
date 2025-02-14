@@ -300,6 +300,21 @@ int has_flag(int flags, int n){
 #endif
 
 #ifndef built_ins
+void help(commandArgs command, char *cursor, streams streams){
+    fprintf(streams.out, "Program powłoki microshell\n");
+    fprintf(streams.out, "funkcje programu\n");
+    fprintf(streams.out, "- obługa następujących komend:\n");
+    fprintf(streams.out, "  - help\n");
+    fprintf(streams.out, "  - ls [-a|--all] [paths]\n");
+    fprintf(streams.out, "  - cd [paths]\n");
+    fprintf(streams.out, "  - echo [messages]\n");
+    fprintf(streams.out, "  - cat [paths]\n");
+    fprintf(streams.out, "  - mkdir [paths]\n");
+    fprintf(streams.out, "- wyświetlanie kolorowego znaku zachęty\n");
+    fprintf(streams.out, "- nawigacja - strzałki, ctrl + strzałki\n");
+    fprintf(streams.out, "- historia\n");
+    fprintf(streams.out, "- uruchamianie programów z PATH\n");
+}
 void ls_once(char *path, int flags, streams streams){
     DIR *dir;
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
@@ -313,7 +328,7 @@ void ls_once(char *path, int flags, streams streams){
         }
         closedir(dir);
     }
-    printf("\n");
+    fprintf(streams.out,"\n");
 }
 void ls(commandArgs command, char *cursor, streams streams){
     flag_info flags = get_flag_info(command, "a", (char*[]){"all",});
@@ -331,13 +346,13 @@ void ls(commandArgs command, char *cursor, streams streams){
         move_path(path, command.argv[j]);
             
         if (check_path(path) != DT_DIR){
-            printf("path error: %s\n", path);
-            if(n>1 && i != n-1) printf("\n");
+            fprintf(streams.err, "path error: %s\n", path);
+            if(n>1 && i != n-1) fprintf(streams.err, "\n");
             continue;
         }
-        if(n>1) printf("%s:\n", command.argv[j]);
+        if(n>1) fprintf(streams.out, "%s:\n", command.argv[j]);
         ls_once(path, flags.flags, streams);
-        if(n>1 && i != n-1) printf("\n");
+        if(n>1 && i != n-1) fprintf(streams.out, "\n");
     }
 }
 int cd(commandArgs command, char *cursor, streams streams){
@@ -671,6 +686,7 @@ int run_command(typingField *field, char* cursor, streams streams){
         else if(!strcmp(command.name,"echo"))   { echo(command, cursor, streams); }
         else if(!strcmp(command.name,"cat"))    { cat(command, cursor, streams); }
         else if(!strcmp(command.name,"mkdir"))    { mkdir_(command, cursor, streams); }
+        else if(!strcmp(command.name,"help"))    { help(command, cursor, streams); }
         else{
             char *paths = getenv("PATH");
             char *path = strtok(paths,":");
