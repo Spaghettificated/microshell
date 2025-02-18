@@ -46,7 +46,7 @@ typedef struct streams{
 }streams;
 
 
-#ifndef typing_fields
+// #region typing_fields
 typedef struct typingField{
     char *start;
     char *cursor;
@@ -158,9 +158,9 @@ void clear_field(typingField *field){
     set_cursor(field->start, field);
     tail_to_cursor(field->end, field);
 }
-#endif
+// #endregion
 
-#ifndef paths
+// #region paths
 int check_in_path(char *path, char *name){
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
     DIR *dir = opendir(path);
@@ -233,9 +233,9 @@ int move_path(char *from, char *path){
     }
     return 0;
 }
-#endif
+// #endregion
 
-#ifndef flags
+// #region flags
 typedef struct flag_info{
     int flags;
     int argc;
@@ -297,9 +297,9 @@ flag_info get_flag_info(commandArgs command, char *c_flags, char *s_flags[]){
 int has_flag(int flags, int n){
     return flags & (1<<n);
 }
-#endif
+// #endregion
 
-#ifndef built_ins
+// #region built_ins
 void help(commandArgs command, char *cursor, streams streams){
     fprintf(streams.out, "Program powłoki microshell\n");
     fprintf(streams.out, "funkcje programu\n");
@@ -428,9 +428,9 @@ int mkdir_(commandArgs command, char *cursor, streams streams){
             fprintf(streams.out, "%s already exist\n", path);
     }
 }
-#endif
+// #endregion
 
-#ifndef history
+// #region history
 // typedef struct history{
 //     char *entries[STR_BUFOR_SIZE];
 //     int count;
@@ -515,9 +515,9 @@ int histlen(){
     }
     return n+1;
 }
-#endif
+// #endregion
 
-#ifndef terminal_tricks
+// #region terminal_tricks
 void canon(struct termios *old){
     if (tcgetattr(0, old) < 0)
             perror("tcsetattr()");
@@ -562,8 +562,9 @@ void show_prompt(char *cursor){
     printf(NOCOLOR);
     printf(WHITE);
 }
-#endif
+// #endregion
 
+// #region old_input
 // void parse_input(char *input, char *cursor){
 //     save(input);
 //     printf("\n");
@@ -653,12 +654,11 @@ void show_prompt(char *cursor){
 //     // }
 //     // input[0] = '\0';
 // }
+// #endregion
 
-#ifndef handle_commands
-void get_command(commandArgs *command, char *bufor, typingField *field){
-    strcpy(bufor, field->start);
-    clear_field(field);
-    char *token = strtok(bufor, " ");
+// #region handle_commands
+void parse_command(commandArgs *command, char *input){
+    char *token = strtok(input, " ");
     command->name = token;
     command->argc = 0;
     while( token != NULL ){
@@ -671,12 +671,22 @@ void get_command(commandArgs *command, char *bufor, typingField *field){
     }
     command->argv[command->argc] = NULL;
 }
-int run_command(typingField *field, char* cursor, streams streams){
-    printf("\n");
-    char comstr[STR_BUFOR_SIZE];
-    commandArgs command;
-    get_command(&command, comstr, field);
+// void get_commands(commandArgs *commands, char *input, typingField *field){
+//     char *token = strtok(input, "|");
+//     command->name = token;
+//     command->argc = 0;
+//     while( token != NULL ){
+//         command->argv[command->argc] = token;
+//         command->argc++;
+//         token = strtok(NULL, " ");
+//     }
+//     if (command->name==NULL){
+//         command->name = "";
+//     }
+//     command->argv[command->argc] = NULL;
+// }
 
+int run(commandArgs command,char* cursor, streams streams){
     if(!strcmp(command.name,"exit"))   { return 1; }
     else if(!strcmp(command.name,"cd"))     { cd(command, cursor, streams); return 0;}
 
@@ -731,6 +741,23 @@ int run_command(typingField *field, char* cursor, streams streams){
 
     return 0;
 }
+int handle_input(typingField *field, char* cursor, streams streams){
+    printf("\n");
+    char comstr[STR_BUFOR_SIZE];
+    strcpy(comstr, field->start);
+    commandArgs commands[ARG_BUFOR_SIZE]; 
+    // parse_command(field->start);
+    parse_command(commands, comstr);
+    clear_field(field);
+
+    commandArgs command = *commands;
+    // get_command(&command, comstr, field);
+
+    return run(command, cursor, streams);
+
+
+}
+
 int input_char(typingField *field, int hlen){
     char c = getchar();
     if(c=='\e'){
@@ -819,7 +846,7 @@ int input_char(typingField *field, int hlen){
     }
     return 0;
 }
-#endif
+// #endregion
 
 int main() {
     int hlen = histlen();
@@ -861,7 +888,7 @@ int main() {
         if (input_char(&field, hlen)) {
             save_entry(field.start);
             uncanon(&old);
-            if (run_command(&field, cursor, streams)){
+            if (handle_input(&field, cursor, streams)){
                 break;
             }
             hlen++;
