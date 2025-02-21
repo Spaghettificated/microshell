@@ -37,6 +37,7 @@ typedef struct commandArgs{
     char *name;
     char *argv[ARG_BUFOR_SIZE];
     int argc;
+    char *redirects[ARG_BUFOR_SIZE];
 }commandArgs;
 
 typedef struct streams{
@@ -431,11 +432,6 @@ int mkdir_(commandArgs command, char *cursor, streams streams){
 // #endregion
 
 // #region history
-// typedef struct history{
-//     char *entries[STR_BUFOR_SIZE];
-//     int count;
-//     int current;
-// }history;
 void save_entry(char *entry){
     FILE *history = fopen("history", "a");
     fprintf(history, "\n%s", entry);
@@ -661,7 +657,28 @@ void parse_command(commandArgs *command, char *input){
     char *token = strtok(input, " ");
     command->name = token;
     command->argc = 0;
+    int redirect_n = 0;
     while( token != NULL ){
+        int redirect_prefix_size = 0;
+        if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
+            redirect_prefix_size = 2;
+        }
+        else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
+            redirect_prefix_size = 1;
+        }
+        if(redirect_prefix_size != 0){
+            if(token[redirect_prefix_size]=='\0'){
+                char *next_token = strtok(NULL, " "); // what if NULL?
+                for(char *idx = token+redirect_prefix_size; idx<next_token; idx++){
+                    *idx = ' ';
+                }
+            }
+            command->redirects[redirect_n] = token;
+            redirect_n++;
+            token = strtok(NULL, " ");
+            continue;
+        }
+        
         command->argv[command->argc] = token;
         command->argc++;
         token = strtok(NULL, " ");
@@ -671,22 +688,25 @@ void parse_command(commandArgs *command, char *input){
     }
     command->argv[command->argc] = NULL;
 }
-// void get_commands(commandArgs *commands, char *input, typingField *field){
-//     char *token = strtok(input, "|");
-//     command->name = token;
-//     command->argc = 0;
-//     while( token != NULL ){
-//         command->argv[command->argc] = token;
-//         command->argc++;
-//         token = strtok(NULL, " ");
-//     }
-//     if (command->name==NULL){
-//         command->name = "";
-//     }
-//     command->argv[command->argc] = NULL;
-// }
 
-int run(commandArgs command,char* cursor, streams streams){
+void get_commands(commandArgs *commands, char *input){
+    // char *token = strtok(input, "|");
+    char *token = strchr(input, '|');
+    commandArgs *command = commands;
+    while( token != NULL ){
+        *token = '\0';
+        token++;
+        // printf("token(%s)\n", input);
+        parse_command(command, input);
+        input = token;
+        token = strchr(input, '|');
+        command++;
+    }
+    parse_command(command, input);
+    command++;
+    command = NULL;
+}
+int run_command(commandArgs command, char* cursor, streams streams){
     if(!strcmp(command.name,"exit"))   { return 1; }
     else if(!strcmp(command.name,"cd"))     { cd(command, cursor, streams); return 0;}
 
@@ -747,15 +767,21 @@ int handle_input(typingField *field, char* cursor, streams streams){
     strcpy(comstr, field->start);
     commandArgs commands[ARG_BUFOR_SIZE]; 
     // parse_command(field->start);
-    parse_command(commands, comstr);
+    // parse_command(commands, comstr);
+    get_commands(commands, comstr);
     clear_field(field);
 
-    commandArgs command = *commands;
+    // commandArgs command = *commands;
     // get_command(&command, comstr, field);
 
-    return run(command, cursor, streams);
+    for(commandArgs *command = commands; command->name != NULL; command++){
+        // printf("run(%s) in %d\n", command->name, command);
+        run_command(*command, cursor, streams);
+    }
 
+    // return run_command(command, cursor, streams);
 
+    return 0;
 }
 
 int input_char(typingField *field, int hlen){
