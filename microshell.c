@@ -12,6 +12,7 @@
 
 #include <fcntl.h> // O_RDONLY
 
+
 #define RED   "\x1B[31m"
 #define GREEN   "\x1B[32m"
 #define YELLOW   "\x1B[33m"
@@ -710,8 +711,8 @@ int run_command(commandArgs command, char* cursor, streams streams){
     if(!strcmp(command.name,"exit"))   { return 1; }
     else if(!strcmp(command.name,"cd"))     { cd(command, cursor, streams); return 0;}
 
-    pid_t id = fork();
-    if(id==0){
+    // pid_t id = fork();
+    // if(id==0){
         if(!strcmp(command.name,"ls"))     { ls(command, cursor, streams); }
         else if(!strcmp(command.name,"echo"))   { echo(command, cursor, streams); }
         else if(!strcmp(command.name,"cat"))    { cat(command, cursor, streams); }
@@ -753,11 +754,11 @@ int run_command(commandArgs command, char* cursor, streams streams){
                 // }
             }
         }
-        exit(0);
-    }
-    else{
-        wait(NULL);
-    }
+    //     exit(0);
+    // }
+    // else{
+    //     wait(NULL);
+    // }
 
     return 0;
 }
@@ -774,14 +775,30 @@ int handle_input(typingField *field, char* cursor, streams streams){
     // commandArgs command = *commands;
     // get_command(&command, comstr, field);
 
+    int exit_program = 0;
+
     for(commandArgs *command = commands; command->name != NULL; command++){
         // printf("run(%s) in %d\n", command->name, command);
-        run_command(*command, cursor, streams);
+
+        pid_t id = fork();
+        if(id==0){
+            exit(run_command(*command, cursor, streams));
+        }
+        else{
+            int status;
+            wait(&status);
+            if (WIFEXITED(status)){
+                exit_program = WEXITSTATUS(status);
+                if(exit_program){
+                    return 1;
+                }
+            }
+        }
     }
 
     // return run_command(command, cursor, streams);
 
-    return 0;
+    return exit_program;
 }
 
 int input_char(typingField *field, int hlen){
