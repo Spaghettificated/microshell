@@ -759,10 +759,12 @@ int run_command(commandArgs command, char* cursor, streams streams){
     // else{
     //     wait(NULL);
     // }
-
+    fclose(streams.in);
+    fclose(streams.out);
+    fclose(streams.err);
     return 0;
 }
-int handle_input(typingField *field, char* cursor, streams streams){
+int handle_input(typingField *field, char* cursor, streams streams0){
     printf("\n");
     char comstr[STR_BUFOR_SIZE];
     strcpy(comstr, field->start);
@@ -776,13 +778,39 @@ int handle_input(typingField *field, char* cursor, streams streams){
     // get_command(&command, comstr, field);
 
     int exit_program = 0;
+    streams redirected = streams0;
+    int pipefd[2] = {-1, -1};
 
     for(commandArgs *command = commands; command->name != NULL; command++){
         // printf("run(%s) in %d\n", command->name, command);
 
+        if (command==commands){ // pierwsza komenda
+            redirected.in = streams0.in;
+            // printf("first\n");
+        }
+        else{
+            redirected.in = fdopen(pipefd[0],"r");
+            close(pipefd[0]); 
+            // close(pipefd[1]); 
+        }
+
+        if ((command+1)->name == NULL){ // ostatnia komenda
+            // printf("last\n");
+            redirected.out = streams0.out;
+            redirected.err = streams0.err;
+        }
+        else{
+            if (pipe(pipefd) == -1) {   // pipe making  https://lms.amu.edu.pl/sci/mod/page/view.php?id=27019
+                perror("pipe error");
+                exit(EXIT_FAILURE);
+            }
+            redirected.out = fdopen(pipefd[1],"w");
+        }
+
+
         pid_t id = fork();
         if(id==0){
-            exit(run_command(*command, cursor, streams));
+            exit(run_command(*command, cursor, redirected));
         }
         else{
             int status;
@@ -794,6 +822,10 @@ int handle_input(typingField *field, char* cursor, streams streams){
                 }
             }
         }
+    }
+    if(pipefd[0] != -1){ // close pipe
+        close(pipefd[0]); 
+        close(pipefd[1]); 
     }
 
     // return run_command(command, cursor, streams);
