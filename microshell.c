@@ -383,13 +383,14 @@ int echo(commandArgs command, char *cursor, streams streams){
         char *message = command.argv[i];
         // printf("\t\t> echo: '%s' to %d\n", message, streams.out);
         fprintf(streams.out, "%s\n", message);
+        fprintf(streams.out, "\0");
     }
     return 0;
 }
 int cat(commandArgs command, char *cursor, streams streams){
     // printf("\t\t> cat from %d to %d: \n", in, out);
     if(command.argc <= 1){
-        char buffer[256];
+        char buffer[64];
         while(fgets(buffer, sizeof(buffer), streams.in) != NULL){
             // printf("\t\t %s", buffer);
             fprintf(streams.out, buffer);
@@ -689,7 +690,6 @@ void parse_command(commandArgs *command, char *input){
     }
     command->argv[command->argc] = NULL;
 }
-
 void get_commands(commandArgs *commands, char *input){
     // char *token = strtok(input, "|");
     char *token = strchr(input, '|');
@@ -705,7 +705,7 @@ void get_commands(commandArgs *commands, char *input){
     }
     parse_command(command, input);
     command++;
-    command = NULL;
+    command->name=NULL;
 }
 int run_command(commandArgs command, char* cursor, streams streams){
     if(!strcmp(command.name,"exit"))   { return 1; }
@@ -759,9 +759,9 @@ int run_command(commandArgs command, char* cursor, streams streams){
     // else{
     //     wait(NULL);
     // }
-    fclose(streams.in);
-    fclose(streams.out);
-    fclose(streams.err);
+    // fclose(streams.in);
+    // fclose(streams.out);
+    // fclose(streams.err);
     return 0;
 }
 int handle_input(typingField *field, char* cursor, streams streams0){
@@ -769,17 +769,15 @@ int handle_input(typingField *field, char* cursor, streams streams0){
     char comstr[STR_BUFOR_SIZE];
     strcpy(comstr, field->start);
     commandArgs commands[ARG_BUFOR_SIZE]; 
-    // parse_command(field->start);
-    // parse_command(commands, comstr);
+    
     get_commands(commands, comstr);
     clear_field(field);
-
-    // commandArgs command = *commands;
-    // get_command(&command, comstr, field);
-
+    
     int exit_program = 0;
     streams redirected = streams0;
     int pipefd[2] = {-1, -1};
+    int pids[ARG_BUFOR_SIZE];
+    int proces_n = 0;
 
     for(commandArgs *command = commands; command->name != NULL; command++){
         // printf("run(%s) in %d\n", command->name, command);
@@ -790,7 +788,7 @@ int handle_input(typingField *field, char* cursor, streams streams0){
         }
         else{
             redirected.in = fdopen(pipefd[0],"r");
-            close(pipefd[0]); 
+            // close(pipefd[0]); 
             // close(pipefd[1]); 
         }
 
@@ -800,6 +798,7 @@ int handle_input(typingField *field, char* cursor, streams streams0){
             redirected.err = streams0.err;
         }
         else{
+            // close(pipefd[0]); 
             if (pipe(pipefd) == -1) {   // pipe making  https://lms.amu.edu.pl/sci/mod/page/view.php?id=27019
                 perror("pipe error");
                 exit(EXIT_FAILURE);
@@ -810,24 +809,61 @@ int handle_input(typingField *field, char* cursor, streams streams0){
 
         pid_t id = fork();
         if(id==0){
-            exit(run_command(*command, cursor, redirected));
+
+            for(char **redirect_ptr = command->redirects; redirect_ptr != NULL; redirect_ptr++){
+                char *redirect = *redirect_ptr;
+                if(!strncmp(redirect, ">",1)){
+                    while( *(++redirect) == ' ' );
+                    FILE *out = fopen(redirect, "w");
+                    
+                }
+        // int redirect_prefix_size = 0;
+        // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
+        //     redirect_prefix_size = 2;
+        // }
+        // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
+        //     redirect_prefix_size = 1;
+        // }
+        // if(redirect_prefix_size 
+                // FILE f = fopen(path, O_RDONLY);
+            }
+
+            int code = run_command(*command, cursor, redirected);
+            // close(pipefd[0]); 
+            // close(pipefd[1]);
+            printf("zamykamy proces %d z komendą [%s]\n", getpid(), command->name);
+            exit(code);
         }
         else{
-            int status;
-            wait(&status);
-            if (WIFEXITED(status)){
-                exit_program = WEXITSTATUS(status);
-                if(exit_program){
-                    return 1;
-                }
-            }
+            printf("rozpoczęto proces %d z komendą [%s]\n", id, command->name);
+            close(pipefd[1]); 
+            pids[proces_n] = id;
+            proces_n += 1;
         }
     }
+
     if(pipefd[0] != -1){ // close pipe
         close(pipefd[0]); 
         close(pipefd[1]); 
     }
-
+    int j = proces_n;
+    while (j > 0)
+    {
+        int status;
+        int id = wait(&status);
+        for(int i = 0; i < proces_n; i++){
+            if(id == pids[i]){
+                pids[i] = 0;
+            }
+        }
+        if (WIFEXITED(status)){
+            exit_program = WEXITSTATUS(status);
+            if(exit_program){
+                return 1;
+            }
+        }
+        j--;
+    }
     // return run_command(command, cursor, streams);
 
     return exit_program;
