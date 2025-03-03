@@ -42,9 +42,9 @@ typedef struct commandArgs{
 }commandArgs;
 
 typedef struct streams{
-    FILE *__restrict__ in;
-    FILE *__restrict__ out;
-    FILE *__restrict__ err;
+    int in;
+    int out;
+    int err;
 }streams;
 
 
@@ -303,21 +303,22 @@ int has_flag(int flags, int n){
 
 // #region built_ins
 void help(commandArgs command, char *cursor, streams streams){
-    fprintf(streams.out, "Program powłoki microshell\n");
-    fprintf(streams.out, "funkcje programu\n");
-    fprintf(streams.out, "- obługa następujących komend:\n");
-    fprintf(streams.out, "  - help\n");
-    fprintf(streams.out, "  - ls [-a|--all] [paths]\n");
-    fprintf(streams.out, "  - cd [paths]\n");
-    fprintf(streams.out, "  - echo [messages]\n");
-    fprintf(streams.out, "  - cat [paths]\n");
-    fprintf(streams.out, "  - mkdir [paths]\n");
-    fprintf(streams.out, "- wyświetlanie kolorowego znaku zachęty\n");
-    fprintf(streams.out, "- nawigacja - strzałki, ctrl + strzałki\n");
-    fprintf(streams.out, "- historia\n");
-    fprintf(streams.out, "- uruchamianie programów z PATH\n");
+    FILE *out = fdopen(streams.out, "w");
+    fprintf(out, "Program powłoki microshell\n");
+    fprintf(out, "funkcje programu\n");
+    fprintf(out, "- obługa następujących komend:\n");
+    fprintf(out, "  - help\n");
+    fprintf(out, "  - ls [-a|--all] [paths]\n");
+    fprintf(out, "  - cd [paths]\n");
+    fprintf(out, "  - echo [messages]\n");
+    fprintf(out, "  - cat [paths]\n");
+    fprintf(out, "  - mkdir [paths]\n");
+    fprintf(out, "- wyświetlanie kolorowego znaku zachęty\n");
+    fprintf(out, "- nawigacja - strzałki, ctrl + strzałki\n");
+    fprintf(out, "- historia\n");
+    fprintf(out, "- uruchamianie programów z PATH\n");
 }
-void ls_once(char *path, int flags, streams streams){
+void ls_once(char *path, int flags, FILE *out){
     DIR *dir;
     struct dirent *entry; // https://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
     dir = opendir(path);
@@ -326,18 +327,21 @@ void ls_once(char *path, int flags, streams streams){
             if (!has_flag(flags, 0) && entry->d_name[0]=='.'){ // -a flag
                 continue;
             }
-            fprintf(streams.out, "%s ", entry->d_name);
+            fprintf(out, "%s ", entry->d_name);
         }
         closedir(dir);
     }
-    fprintf(streams.out,"\n");
+    fprintf(out,"\n");
 }
 void ls(commandArgs command, char *cursor, streams streams){
+    FILE *err = fdopen(streams.err, "w");
+    FILE *out = fdopen(streams.out, "w");
+
     flag_info flags = get_flag_info(command, "a", (char*[]){"all",});
     int n = flags.argc;
 
     if (n==0){
-        ls_once(cursor, flags.flags, streams);
+        ls_once(cursor, flags.flags, out);
         return;
     }
 
@@ -348,13 +352,13 @@ void ls(commandArgs command, char *cursor, streams streams){
         move_path(path, command.argv[j]);
             
         if (check_path(path) != DT_DIR){
-            fprintf(streams.err, "path error: %s\n", path);
-            if(n>1 && i != n-1) fprintf(streams.err, "\n");
+            fprintf(err, "path error: %s\n", path);
+            if(n>1 && i != n-1) fprintf(err, "\n");
             continue;
         }
-        if(n>1) fprintf(streams.out, "%s:\n", command.argv[j]);
-        ls_once(path, flags.flags, streams);
-        if(n>1 && i != n-1) fprintf(streams.out, "\n");
+        if(n>1) fprintf(out, "%s:\n", command.argv[j]);
+        ls_once(path, flags.flags, out);
+        if(n>1 && i != n-1) fprintf(out, "\n");
     }
 }
 int cd(commandArgs command, char *cursor, streams streams){
@@ -373,64 +377,63 @@ int cd(commandArgs command, char *cursor, streams streams){
         strcpy(cursor, new_cursor);
         return 0;
     }
-    else{
-        fprintf(streams.err, "cd: path [%s] not found [%s] -> [%s]\n", new_cursor, cursor, path);
-        return 1;
-    }
+    // else{
+    //     fprintf(streams.err, "cd: path [%s] not found [%s] -> [%s]\n", new_cursor, cursor, path);
+    //     return 1;
+    // }
 }
-int echo(commandArgs command, char *cursor, streams streams){
-    for(int i = 1; i<command.argc; i++){
-        char *message = command.argv[i];
-        // printf("\t\t> echo: '%s' to %d\n", message, streams.out);
-        fprintf(streams.out, "%s\n", message);
-        fprintf(streams.out, "\0");
-    }
-    return 0;
-}
-int cat(commandArgs command, char *cursor, streams streams){
-    // printf("\t\t> cat from %d to %d: \n", in, out);
-    if(command.argc <= 1){
-        char buffer[64];
-        while(fgets(buffer, sizeof(buffer), streams.in) != NULL){
-            // printf("\t\t %s", buffer);
-            fprintf(streams.out, buffer);
-        }
-        return 0;
-    }
-    else{
-        char path[STR_BUFOR_SIZE];
-        char buffer[256];
+// int echo(commandArgs command, char *cursor, streams streams){
+//     for(int i = 1; i<command.argc; i++){
+//         char *message = command.argv[i];
+//         // printf("\t\t> echo: '%s' to %d\n", message, streams.out);
+//         fprintf(streams.out, "%s\n", message);
+//         fprintf(streams.out, "\0");
+//     }
+//     return 0;
+// }
+// int cat(commandArgs command, char *cursor, streams streams){
+//     // printf("\t\t> cat from %d to %d: \n", in, out);
+//     if(command.argc <= 1){
+//         char buffer[64];
+//         while(fgets(buffer, sizeof(buffer), streams.in) != NULL){
+//             // printf("\t\t %s", buffer);
+//             fprintf(streams.out, buffer);
+//         }
+//         return 0;
+//     }
+//     else{
+//         char path[STR_BUFOR_SIZE];
+//         char buffer[256];
+//         for(int i = 1; i < command.argc; i++){
+//             strcpy(path, cursor);
+//             move_path(path, command.argv[i]);
+//             if(check_path(path) == DT_REG){
+//                 int fd = open(path, O_RDONLY);
+//                 while(read(fd, buffer, sizeof(buffer))>0){
+//                     // printf("\t\t %s", buffer);
+//                     fprintf(streams.out, buffer);
+//                 }
+//                 close(fd);
+//             }
+//             else
+//                 fprintf(streams.out, "%s: not a file\n", path);
+//         }
+//     }
+// }
+// int mkdir_(commandArgs command, char *cursor, streams streams){
+//     char path[STR_BUFOR_SIZE];
+//     char buffer[256];
+//     for(int i = 1; i < command.argc; i++){
+//         strcpy(path, cursor);
+//         move_path(path, command.argv[i]);
+//         if(check_path(path) < 0){
+//             mkdir(path, 0700);
+//         }
+//         else
+//             fprintf(streams.out, "%s already exist\n", path);
+//     }
+// }
 
-        for(int i = 1; i < command.argc; i++){
-            strcpy(path, cursor);
-            move_path(path, command.argv[i]);
-            if(check_path(path) == DT_REG){
-                int fd = open(path, O_RDONLY);
-                while(read(fd, buffer, sizeof(buffer))>0){
-                    // printf("\t\t %s", buffer);
-                    fprintf(streams.out, buffer);
-                }
-                close(fd);
-            }
-            else
-                fprintf(streams.out, "%s: not a file\n", path);
-        }
-    }
-}
-int mkdir_(commandArgs command, char *cursor, streams streams){
-    char path[STR_BUFOR_SIZE];
-    char buffer[256];
-
-    for(int i = 1; i < command.argc; i++){
-        strcpy(path, cursor);
-        move_path(path, command.argv[i]);
-        if(check_path(path) < 0){
-            mkdir(path, 0700);
-        }
-        else
-            fprintf(streams.out, "%s already exist\n", path);
-    }
-}
 // #endregion
 
 // #region history
@@ -714,9 +717,9 @@ int run_command(commandArgs command, char* cursor, streams streams){
     // pid_t id = fork();
     // if(id==0){
         if(!strcmp(command.name,"ls"))     { ls(command, cursor, streams); }
-        else if(!strcmp(command.name,"echo"))   { echo(command, cursor, streams); }
-        else if(!strcmp(command.name,"cat"))    { cat(command, cursor, streams); }
-        else if(!strcmp(command.name,"mkdir"))    { mkdir_(command, cursor, streams); }
+        // else if(!strcmp(command.name,"echo"))   { echo(command, cursor, streams); }
+        // else if(!strcmp(command.name,"cat"))    { cat(command, cursor, streams); }
+        // else if(!strcmp(command.name,"mkdir"))    { mkdir_(command, cursor, streams); }
         else if(!strcmp(command.name,"help"))    { help(command, cursor, streams); }
         else{
             char *paths = getenv("PATH");
@@ -787,7 +790,9 @@ int handle_input(typingField *field, char* cursor, streams streams0){
             // printf("first\n");
         }
         else{
-            redirected.in = fdopen(pipefd[0],"r");
+            // redirected.in = fdopen(pipefd[0],"r");
+            redirected.in = pipefd[0];
+
             // close(pipefd[0]); 
             // close(pipefd[1]); 
         }
@@ -803,31 +808,33 @@ int handle_input(typingField *field, char* cursor, streams streams0){
                 perror("pipe error");
                 exit(EXIT_FAILURE);
             }
-            redirected.out = fdopen(pipefd[1],"w");
+
+            // redirected.out = fdopen(pipefd[1],"w");
+            redirected.out = pipefd[1];
         }
 
 
         pid_t id = fork();
         if(id==0){
 
-            for(char **redirect_ptr = command->redirects; redirect_ptr != NULL; redirect_ptr++){
-                char *redirect = *redirect_ptr;
-                if(!strncmp(redirect, ">",1)){
-                    while( *(++redirect) == ' ' );
-                    FILE *out = fopen(redirect, "w");
+        //     for(char **redirect_ptr = command->redirects; redirect_ptr != NULL; redirect_ptr++){
+        //         char *redirect = *redirect_ptr;
+        //         if(!strncmp(redirect, ">",1)){
+        //             while( *(++redirect) == ' ' );
+        //             FILE *out = fopen(redirect, "w");
                     
-                }
-        // int redirect_prefix_size = 0;
-        // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
-        //     redirect_prefix_size = 2;
-        // }
-        // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
-        //     redirect_prefix_size = 1;
-        // }
-        // if(redirect_prefix_size 
-                // FILE f = fopen(path, O_RDONLY);
-            }
-
+        //         }
+        // // int redirect_prefix_size = 0;
+        // // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
+        // //     redirect_prefix_size = 2;
+        // // }
+        // // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
+        // //     redirect_prefix_size = 1;
+        // // }
+        // // if(redirect_prefix_size 
+        //         // FILE f = fopen(path, O_RDONLY);
+        //     }
+            printf("hi from %d\n", getpid());
             int code = run_command(*command, cursor, redirected);
             // close(pipefd[0]); 
             // close(pipefd[1]);
@@ -987,9 +994,12 @@ int main() {
     struct termios old = {0};
     canon(&old);
     streams streams;
-    streams.in  = stdin;
-    streams.out = stdout;
-    streams.err = stderr;
+    // streams.in  = stdin;
+    // streams.out = stdout;
+    // streams.err = stderr;
+    streams.in  = STDIN_FILENO;
+    streams.out = STDOUT_FILENO;
+    streams.err = STDERR_FILENO;
     show_prompt(cursor);
     while(1){
         fflush(stdout);
