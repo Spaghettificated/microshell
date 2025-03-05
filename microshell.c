@@ -722,6 +722,7 @@ int run_command(commandArgs command, char* cursor, streams streams){
         // else if(!strcmp(command.name,"mkdir"))    { mkdir_(command, cursor, streams); }
         else if(!strcmp(command.name,"help"))    { help(command, cursor, streams); }
         else{
+            printf("looking in PATH\n");
             char *paths = getenv("PATH");
             char *path = strtok(paths,":");
             char bin_path[STR_BUFOR_SIZE];
@@ -782,94 +783,104 @@ int handle_input(typingField *field, char* cursor, streams streams0){
     int pids[ARG_BUFOR_SIZE];
     int proces_n = 0;
 
-    for(commandArgs *command = commands; command->name != NULL; command++){
-        // printf("run(%s) in %d\n", command->name, command);
-
-        if (command==commands){ // pierwsza komenda
-            redirected.in = streams0.in;
-            // printf("first\n");
+    int run_in_main_process = 0;
+    if((commands+1)->name == NULL){
+        if(!strcmp(commands->name,"cd"))     { 
+            cd(*commands, cursor, streams0); 
+            run_in_main_process = 1;
         }
-        else{
-            // redirected.in = fdopen(pipefd[0],"r");
-            redirected.in = pipefd[0];
+    }
 
-            // close(pipefd[0]); 
-            // close(pipefd[1]); 
-        }
+    if(!run_in_main_process) {
+        for(commandArgs *command = commands; command->name != NULL; command++){
+            // printf("run(%s) in %d\n", command->name, command);
 
-        if ((command+1)->name == NULL){ // ostatnia komenda
-            // printf("last\n");
-            redirected.out = streams0.out;
-            redirected.err = streams0.err;
-        }
-        else{
-            // close(pipefd[0]); 
-            if (pipe(pipefd) == -1) {   // pipe making  https://lms.amu.edu.pl/sci/mod/page/view.php?id=27019
-                perror("pipe error");
-                exit(EXIT_FAILURE);
+            if (command==commands){ // pierwsza komenda
+                redirected.in = streams0.in;
+                // printf("first\n");
+            }
+            else{
+                // redirected.in = fdopen(pipefd[0],"r");
+                redirected.in = pipefd[0];
+
+                // close(pipefd[0]); 
+                // close(pipefd[1]); 
             }
 
-            // redirected.out = fdopen(pipefd[1],"w");
-            redirected.out = pipefd[1];
+            if ((command+1)->name == NULL){ // ostatnia komenda
+                // printf("last\n");
+                redirected.out = streams0.out;
+                redirected.err = streams0.err;
+            }
+            else{
+                // close(pipefd[0]); 
+                if (pipe(pipefd) == -1) {   // pipe making  https://lms.amu.edu.pl/sci/mod/page/view.php?id=27019
+                    perror("pipe error");
+                    exit(EXIT_FAILURE);
+                }
+
+                // redirected.out = fdopen(pipefd[1],"w");
+                redirected.out = pipefd[1];
+            }
+
+
+            pid_t id = fork();
+            if(id==0){
+
+            //     for(char **redirect_ptr = command->redirects; redirect_ptr != NULL; redirect_ptr++){
+            //         char *redirect = *redirect_ptr;
+            //         if(!strncmp(redirect, ">",1)){
+            //             while( *(++redirect) == ' ' );
+            //             FILE *out = fopen(redirect, "w");
+                        
+            //         }
+            // // int redirect_prefix_size = 0;
+            // // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
+            // //     redirect_prefix_size = 2;
+            // // }
+            // // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
+            // //     redirect_prefix_size = 1;
+            // // }
+            // // if(redirect_prefix_size 
+            //         // FILE f = fopen(path, O_RDONLY);
+            //     }
+                printf("hi from %d\n", getpid());
+                int code = run_command(*command, cursor, redirected);
+                // close(pipefd[0]); 
+                // close(pipefd[1]);
+                printf("zamykamy proces %d z komendą [%s]\n", getpid(), command->name);
+                exit(code);
+            }
+            else{
+                printf("rozpoczęto proces %d z komendą [%s]\n", id, command->name);
+                close(pipefd[1]); 
+                pids[proces_n] = id;
+                proces_n += 1;
+            }
         }
 
-
-        pid_t id = fork();
-        if(id==0){
-
-        //     for(char **redirect_ptr = command->redirects; redirect_ptr != NULL; redirect_ptr++){
-        //         char *redirect = *redirect_ptr;
-        //         if(!strncmp(redirect, ">",1)){
-        //             while( *(++redirect) == ' ' );
-        //             FILE *out = fopen(redirect, "w");
-                    
-        //         }
-        // // int redirect_prefix_size = 0;
-        // // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
-        // //     redirect_prefix_size = 2;
-        // // }
-        // // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
-        // //     redirect_prefix_size = 1;
-        // // }
-        // // if(redirect_prefix_size 
-        //         // FILE f = fopen(path, O_RDONLY);
-        //     }
-            printf("hi from %d\n", getpid());
-            int code = run_command(*command, cursor, redirected);
-            // close(pipefd[0]); 
-            // close(pipefd[1]);
-            printf("zamykamy proces %d z komendą [%s]\n", getpid(), command->name);
-            exit(code);
-        }
-        else{
-            printf("rozpoczęto proces %d z komendą [%s]\n", id, command->name);
+        if(pipefd[0] != -1){ // close pipe
+            close(pipefd[0]); 
             close(pipefd[1]); 
-            pids[proces_n] = id;
-            proces_n += 1;
         }
-    }
-
-    if(pipefd[0] != -1){ // close pipe
-        close(pipefd[0]); 
-        close(pipefd[1]); 
-    }
-    int j = proces_n;
-    while (j > 0)
-    {
-        int status;
-        int id = wait(&status);
-        for(int i = 0; i < proces_n; i++){
-            if(id == pids[i]){
-                pids[i] = 0;
+        int j = proces_n;
+        while (j > 0)
+        {
+            int status;
+            int id = wait(&status);
+            for(int i = 0; i < proces_n; i++){
+                if(id == pids[i]){
+                    pids[i] = 0;
+                }
             }
-        }
-        if (WIFEXITED(status)){
-            exit_program = WEXITSTATUS(status);
-            if(exit_program){
-                return 1;
+            if (WIFEXITED(status)){
+                exit_program = WEXITSTATUS(status);
+                if(exit_program){
+                    return 1;
+                }
             }
+            j--;
         }
-        j--;
     }
     // return run_command(command, cursor, streams);
 
