@@ -689,6 +689,7 @@ void parse_command(commandArgs *command, char *input){
         command->name = "";
     }
     command->argv[command->argc] = NULL;
+    command->redirects[redirect_n] = NULL;
 }
 void get_commands(commandArgs *commands, char *input){
     // char *token = strtok(input, "|");
@@ -820,33 +821,38 @@ int handle_input(typingField *field, char* cursor, streams streams0){
 
             pid_t id = fork();
             if(id==0){
-
-            //     for(char **redirect_ptr = command->redirects; redirect_ptr != NULL; redirect_ptr++){
-            //         char *redirect = *redirect_ptr;
-            //         if(!strncmp(redirect, ">",1)){
-            //             while( *(++redirect) == ' ' );
-            //             FILE *out = fopen(redirect, "w");
-                        
-            //         }
-            // // int redirect_prefix_size = 0;
-            // // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
-            // //     redirect_prefix_size = 2;
-            // // }
-            // // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
-            // //     redirect_prefix_size = 1;
-            // // }
-            // // if(redirect_prefix_size 
-            //         // FILE f = fopen(path, O_RDONLY);
-            //     }
+                // FILE *out = NULL;
+                for(char **redirect_ptr = command->redirects; redirect_ptr[0] != NULL; redirect_ptr++){
+                    char *redirect = *redirect_ptr;
+                    if(!strncmp(redirect, ">",1)){
+                        while( *(++redirect) == ' ' );
+                        printf("redirect: %s\n", redirect);
+                        redirected.out = open(redirect, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        // fdopen(redirected.out, "w");
+                    }
+            // int redirect_prefix_size = 0;
+            // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
+            //     redirect_prefix_size = 2;
+            // }
+            // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
+            //     redirect_prefix_size = 1;
+            // }
+            // if(redirect_prefix_size 
+                    // FILE f = fopen(path, O_RDONLY);
+                }
 
                 close(pipefd[1]);
                 printf("hi from %d\n", getpid());
                 dup2(redirected.in, STDIN_FILENO);
                 dup2(redirected.out, STDOUT_FILENO);
                 dup2(redirected.err, STDERR_FILENO);
+                printf("!\n");
                 int code = run_command(*command, cursor, redirected);
+                fflush(stdout);
                 printf("zamykamy proces %d z komendą [%s]\n", getpid(), command->name);
                 close(pipefd[0]); 
+                // if( out != NULL) fclose(out);
+                // else if (redirected.out != 1) close(redirected.out);
                 if (redirected.out != 1) close(redirected.out);
                 exit(code);
             }
