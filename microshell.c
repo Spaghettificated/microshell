@@ -379,57 +379,57 @@ int cd(commandArgs command, char *cursor){
     //     return 1;
     // }
 }
-// int echo(commandArgs command, char *cursor, streams streams){
-//     for(int i = 1; i<command.argc; i++){
-//         char *message = command.argv[i];
-//         // printf("\t\t> echo: '%s' to %d\n", message, streams.out);
-//         fprintf(streams.out, "%s\n", message);
-//         fprintf(streams.out, "\0");
-//     }
-//     return 0;
-// }
-// int cat(commandArgs command, char *cursor, streams streams){
-//     // printf("\t\t> cat from %d to %d: \n", in, out);
-//     if(command.argc <= 1){
-//         char buffer[64];
-//         while(fgets(buffer, sizeof(buffer), streams.in) != NULL){
-//             // printf("\t\t %s", buffer);
-//             fprintf(streams.out, buffer);
-//         }
-//         return 0;
-//     }
-//     else{
-//         char path[STR_BUFOR_SIZE];
-//         char buffer[256];
-//         for(int i = 1; i < command.argc; i++){
-//             strcpy(path, cursor);
-//             move_path(path, command.argv[i]);
-//             if(check_path(path) == DT_REG){
-//                 int fd = open(path, O_RDONLY);
-//                 while(read(fd, buffer, sizeof(buffer))>0){
-//                     // printf("\t\t %s", buffer);
-//                     fprintf(streams.out, buffer);
-//                 }
-//                 close(fd);
-//             }
-//             else
-//                 fprintf(streams.out, "%s: not a file\n", path);
-//         }
-//     }
-// }
-// int mkdir_(commandArgs command, char *cursor, streams streams){
-//     char path[STR_BUFOR_SIZE];
-//     char buffer[256];
-//     for(int i = 1; i < command.argc; i++){
-//         strcpy(path, cursor);
-//         move_path(path, command.argv[i]);
-//         if(check_path(path) < 0){
-//             mkdir(path, 0700);
-//         }
-//         else
-//             fprintf(streams.out, "%s already exist\n", path);
-//     }
-// }
+int echo(commandArgs command, char *cursor){
+    for(int i = 1; i<command.argc; i++){
+        char *message = command.argv[i];
+        // printf("\t\t> echo: '%s' to %d\n", message, streams.out);
+        printf("%s\n", message);
+        printf("\0");
+    }
+    return 0;
+}
+int cat(commandArgs command, char *cursor){
+    // printf("\t\t> cat from %d to %d: \n", in, out);
+    if(command.argc <= 1){
+        char buffer[64];
+        while(fgets(buffer, sizeof(buffer), stdin) != NULL){
+            // printf("\t\t %s", buffer);
+            printf(buffer);
+        }
+        return 0;
+    }
+    else{
+        char path[STR_BUFOR_SIZE];
+        char buffer[256];
+        for(int i = 1; i < command.argc; i++){
+            strcpy(path, cursor);
+            move_path(path, command.argv[i]);
+            if(check_path(path) == DT_REG){
+                int fd = open(path, O_RDONLY);
+                while(read(fd, buffer, sizeof(buffer))>0){
+                    // printf("\t\t %s", buffer);
+                    printf( buffer);
+                }
+                close(fd);
+            }
+            else
+                printf("%s: not a file\n", path);
+        }
+    }
+}
+int mkdir_(commandArgs command, char *cursor, streams streams){
+    char path[STR_BUFOR_SIZE];
+    char buffer[256];
+    for(int i = 1; i < command.argc; i++){
+        strcpy(path, cursor);
+        move_path(path, command.argv[i]);
+        if(check_path(path) < 0){
+            mkdir(path, 0700);
+        }
+        else
+            printf("%s already exist\n", path);
+    }
+}
 
 // #endregion
 
@@ -714,9 +714,9 @@ int run_command(commandArgs command, char* cursor, streams streams){
     // pid_t id = fork();
     // if(id==0){
         if(!strcmp(command.name,"ls"))     { ls(command, cursor); }
-        // else if(!strcmp(command.name,"echo"))   { echo(command, cursor, streams); }
-        // else if(!strcmp(command.name,"cat"))    { cat(command, cursor, streams); }
-        // else if(!strcmp(command.name,"mkdir"))    { mkdir_(command, cursor, streams); }
+        else if(!strcmp(command.name,"echo"))   { echo(command, cursor); }
+        else if(!strcmp(command.name,"cat"))    { cat(command, cursor); }
+        else if(!strcmp(command.name,"mkdir"))    { mkdir_(command, cursor, streams); }
         else if(!strcmp(command.name,"help"))    { help(command, cursor); }
         else{
             printf("looking in PATH\n");
@@ -847,13 +847,13 @@ int handle_input(typingField *field, char* cursor, streams streams0){
                 int code = run_command(*command, cursor, redirected);
                 printf("zamykamy proces %d z komendą [%s]\n", getpid(), command->name);
                 close(pipefd[0]); 
-                close(redirected.out);
+                if (redirected.out != 1) close(redirected.out);
                 exit(code);
             }
             else{
                 printf("rozpoczęto proces %d z komendą [%s]\n", id, command->name);
                 close(pipefd[1]); 
-                close(redirected.out);
+                if (redirected.out != 1) close(redirected.out);
                 pids[proces_n] = id;
                 proces_n += 1;
             }
