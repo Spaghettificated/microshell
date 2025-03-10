@@ -691,7 +691,8 @@ void parse_command(commandArgs *command, char *input){
     command->argv[command->argc] = NULL;
     command->redirects[redirect_n] = NULL;
 }
-void get_commands(commandArgs *commands, char *input){
+int get_commands(commandArgs *commands, char *input){
+    int i = 1;
     // char *token = strtok(input, "|");
     char *token = strchr(input, '|');
     commandArgs *command = commands;
@@ -703,10 +704,12 @@ void get_commands(commandArgs *commands, char *input){
         input = token;
         token = strchr(input, '|');
         command++;
+        i++;
     }
     parse_command(command, input);
     command++;
     command->name=NULL;
+    return i;
 }
 int run_command(commandArgs command, char* cursor, streams streams){
     if(!strcmp(command.name,"exit"))   { return 1; }
@@ -772,11 +775,11 @@ int handle_input(typingField *field, char* cursor, streams streams0){
     strcpy(comstr, field->start);
     commandArgs commands[ARG_BUFOR_SIZE]; 
     
-    get_commands(commands, comstr);
+    int commands_n = get_commands(commands, comstr);
     clear_field(field);
     
     int exit_program = 0;
-    streams redirected = streams0;
+    // streams redirected = streams0;
     int pipefd[2] = {-1, -1};
     int fdin = -1;
     int fdout = -1;
@@ -791,87 +794,98 @@ int handle_input(typingField *field, char* cursor, streams streams0){
             run_in_main_process = 1;
         }
     }
+    
+    streams *redirects = calloc(commands_n, sizeof(streams));
 
-    for(commandArgs *command = commands; command->name != NULL; command++){
+    for(int i = 0; i < commands_n; i++){ // redirects + init
+        redirects[i].in = STDIN_FILENO;
+        redirects[i].out = STDOUT_FILENO;
+        redirects[i].err = STDERR_FILENO;
     }
+    for(int i = 0; i < commands_n - 1; i++){ //piping
 
+        if (pipe(pipefd) == -1) {   // pipe making  https://lms.amu.edu.pl/sci/mod/page/view.php?id=27019
+            perror("pipe error");
+            exit(EXIT_FAILURE);
+        }
+        redirects[i].out = pipefd[1];
+        redirects[i+1].in = pipefd[0];
+    }
+    printf("n = %d\n", commands_n);
     if(!run_in_main_process) {
-        for(commandArgs *command = commands; command->name != NULL; command++){
-            // printf("run(%s) in %d\n", command->name, command);
-
-            if (command==commands){ // pierwsza komenda
-                redirected.in = streams0.in;
-            }
-            else{
-                redirected.in = pipefd[0];
-            }
-
-            if ((command+1)->name == NULL){ // ostatnia komenda
-                redirected.out = streams0.out;
-                redirected.err = streams0.err;
-            }
-            else{
-                if (pipe(pipefd) == -1) {   // pipe making  https://lms.amu.edu.pl/sci/mod/page/view.php?id=27019
-                    perror("pipe error");
-                    exit(EXIT_FAILURE);
-                }
-                redirected.out = pipefd[1];
-            }
-
-
+        for(int i = 0; i < commands_n; i++){
+            commandArgs *command = commands + i;
             pid_t id = fork();
             if(id==0){
-                // FILE *out = NULL;
-                for(char **redirect_ptr = command->redirects; redirect_ptr[0] != NULL; redirect_ptr++){
-                    char *redirect = *redirect_ptr;
-                    if(!strncmp(redirect, ">",1)){
-                        while( *(++redirect) == ' ' );
-                        printf("redirect: %s\n", redirect);
-                        redirected.out = open(redirect, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                        // fdopen(redirected.out, "w");
+                for(int j = 0; j < commands_n; j++){
+                    if(j != i){
+                        if (redirects[j].in != 0)  close(redirects[j].in);
+                        if (redirects[j].out != 1) close(redirects[j].out);
+                        if (redirects[j].err != 2) close(redirects[j].err);
                     }
-            // int redirect_prefix_size = 0;
-            // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
-            //     redirect_prefix_size = 2;
-            // }
-            // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
-            //     redirect_prefix_size = 1;
-            // }
-            // if(redirect_prefix_size 
-                    // FILE f = fopen(path, O_RDONLY);
                 }
 
-                close(pipefd[1]);
+            //     for(char **redirect_ptr = command->redirects; redirect_ptr[0] != NULL; redirect_ptr++){
+            //         char *redirect = *redirect_ptr;
+            //         if(!strncmp(redirect, ">",1)){
+            //             while( *(++redirect) == ' ' );
+            //             printf("redirect: %s\n", redirect);
+            //             redirected.out = open(redirect, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            //             // fdopen(redirected.out, "w");
+            //         }
+            // // int redirect_prefix_size = 0;
+            // // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
+            // //     redirect_prefix_size = 2;
+            // // }
+            // // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
+            // //     redirect_prefix_size = 1;
+            // // }
+            // // if(redirect_prefix_size 
+            //         // FILE f = fopen(path, O_RDONLY);
+            //     }
+
+                // close(pipefd[1]);
                 printf("hi from %d\n", getpid());
-                dup2(redirected.in, STDIN_FILENO);
-                dup2(redirected.out, STDOUT_FILENO);
-                dup2(redirected.err, STDERR_FILENO);
-                printf("!\n");
-                int code = run_command(*command, cursor, redirected);
+                dup2(redirects[i].in, STDIN_FILENO);
+                dup2(redirects[i].out, STDOUT_FILENO);
+                dup2(redirects[i].err, STDERR_FILENO);
+                int code = run_command(*command, cursor, redirects[i]);
                 fflush(stdout);
                 printf("zamykamy proces %d z komendą [%s]\n", getpid(), command->name);
-                close(pipefd[0]); 
+                // close(pipefd[0]); 
                 // if( out != NULL) fclose(out);
                 // else if (redirected.out != 1) close(redirected.out);
-                if (redirected.out != 1) close(redirected.out);
+                if (redirects[i].in != 0)  close(redirects[i].in);
+                if (redirects[i].out != 1) close(redirects[i].out);
+                if (redirects[i].err != 2) close(redirects[i].err);
                 exit(code);
             }
             else{
                 printf("rozpoczęto proces %d z komendą [%s]\n", id, command->name);
-                close(pipefd[1]); 
-                if (redirected.out != 1) close(redirected.out);
+                // close(pipefd[1]); 
+                // if (redirected.out != 1) close(redirected.out);
                 pids[proces_n] = id;
                 proces_n += 1;
             }
         }
-
-        if(pipefd[0] != -1){ // close pipe
-            close(pipefd[0]); 
-            close(pipefd[1]); 
+        for(int j = 0; j < commands_n; j++){
+            // close(redirects[j].in);
+            // close(redirects[j].out);
+            // close(redirects[j].err);
+            if (redirects[j].in != 0)  close(redirects[j].in);
+            if (redirects[j].out != 1) close(redirects[j].out);
+            if (redirects[j].err != 2) close(redirects[j].err);
         }
+        printf("!\n");
+
+        // if(pipefd[0] != -1){ // close pipe
+        //     close(pipefd[0]); 
+        //     close(pipefd[1]); 
+        // }
         int j = proces_n;
         while (j > 0)
         {
+            
             int status;
             int id = wait(&status);
             for(int i = 0; i < proces_n; i++){
