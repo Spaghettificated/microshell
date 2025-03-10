@@ -801,6 +801,7 @@ int handle_input(typingField *field, char* cursor, streams streams0){
         redirects[i].in = STDIN_FILENO;
         redirects[i].out = STDOUT_FILENO;
         redirects[i].err = STDERR_FILENO;
+
     }
     for(int i = 0; i < commands_n - 1; i++){ //piping
 
@@ -808,8 +809,10 @@ int handle_input(typingField *field, char* cursor, streams streams0){
             perror("pipe error");
             exit(EXIT_FAILURE);
         }
-        redirects[i].out = pipefd[1];
+        // if(redirects[i].in == 0) redirects[i+1].in = pipefd[0];
+        // if(redirects[i].out == 1) redirects[i].out = pipefd[1];
         redirects[i+1].in = pipefd[0];
+        redirects[i].out = pipefd[1];
     }
     printf("n = %d\n", commands_n);
     if(!run_in_main_process) {
@@ -825,24 +828,55 @@ int handle_input(typingField *field, char* cursor, streams streams0){
                     }
                 }
 
-            //     for(char **redirect_ptr = command->redirects; redirect_ptr[0] != NULL; redirect_ptr++){
-            //         char *redirect = *redirect_ptr;
-            //         if(!strncmp(redirect, ">",1)){
-            //             while( *(++redirect) == ' ' );
-            //             printf("redirect: %s\n", redirect);
-            //             redirected.out = open(redirect, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            //             // fdopen(redirected.out, "w");
-            //         }
-            // // int redirect_prefix_size = 0;
-            // // if(!strncmp(token, ">>", 2) || !strncmp(token, "1>", 2) || !strncmp(token, "2>", 2)){
-            // //     redirect_prefix_size = 2;
-            // // }
-            // // else if(!strncmp(token, ">", 1) || !strncmp(token, "<", 1)){
-            // //     redirect_prefix_size = 1;
-            // // }
-            // // if(redirect_prefix_size 
-            //         // FILE f = fopen(path, O_RDONLY);
-            //     }
+                char pathin[STR_BUFOR_SIZE] = "";
+                char pathout[STR_BUFOR_SIZE] = "";
+                char patherr[STR_BUFOR_SIZE] = "";
+                for(char **redirect_ptr = command->redirects; redirect_ptr[0] != NULL; redirect_ptr++){
+                    char *redirect = *redirect_ptr;
+                    char *paths[2] = {NULL,NULL};  
+                    if(!strncmp(redirect, "&>",2)){
+                        paths[0] = pathout;
+                        paths[1] = patherr;
+                        redirect++;
+                    }
+                    else if(!strncmp(redirect, "2>",2)){
+                        paths[0] = patherr;
+                        redirect++;
+                    }
+                    else if(!strncmp(redirect, "1>",2)){
+                        paths[0] = pathout;
+                        redirect++;
+                    }
+                    else if(!strncmp(redirect, ">",1)){
+                        paths[0] = pathout;
+                    }
+                    else if(!strncmp(redirect, "<",1)){
+                        paths[0] = pathin;
+                    }
+                    for(int i = 0; paths[i] != NULL; i++){
+                        char *path = paths[i];
+                        while( *(++redirect) == ' ' );
+                        printf("redirect: %s\n", redirect);
+                        strcpy(path, cursor);
+                        move_path(path, redirect);
+                    }
+                }
+                if(pathin[0] != '\0'){
+                    if(redirects[i].in != 0)
+                        close(redirects[i].in);
+                    redirects[i].in = open(pathin, O_RDONLY, 0644);
+                }
+                if(pathout[0] != '\0'){
+                    if(redirects[i].out != 1)
+                        close(redirects[i].out);
+                    redirects[i].out = open(pathout, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                }
+                if(patherr[0] != '\0'){
+                    if(redirects[i].err != 2)
+                        close(redirects[i].err);
+                    redirects[i].err = open(patherr, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                }
+
 
                 // close(pipefd[1]);
                 printf("hi from %d\n", getpid());
